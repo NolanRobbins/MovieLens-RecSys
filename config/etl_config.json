@@ -1,0 +1,27 @@
+{
+  "data_dir": "./ml-32m",
+  "output_dir": "./processed_data",
+  "min_ratings_per_user": 10,
+  "min_ratings_per_movie": 5,
+  "max_duplicate_rate": 0.01,
+  "train_ratio": 0.64,
+  "val_ratio": 0.16,
+  "test_ratio": 0.20,
+  "data_quality_checks": {
+    "min_users": 1000,
+    "min_movies": 100,
+    "valid_rating_range": [0.5, 5.0],
+    "max_missing_rate": 0.05
+  },
+  "feature_engineering": {
+    "extract_release_year": true,
+    "create_temporal_features": true,
+    "genre_encoding": "multi_hot",
+    "normalize_ratings": false
+  },
+  "logging": {
+    "level": "INFO",
+    "save_logs": true,
+    "log_file": "etl_pipeline.log"
+  }
+}

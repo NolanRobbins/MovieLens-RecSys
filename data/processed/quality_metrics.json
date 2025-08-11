@@ -1,0 +1,26 @@
+{
+  "total_ratings": 32000204,
+  "unique_users": 200948,
+  "unique_movies": 84432,
+  "rating_range": [
+    0.5,
+    5.0
+  ],
+  "duplicate_count": "0",
+  "missing_values": {
+    "ratings": {
+      "userId": 0,
+      "movieId": 0,
+      "rating": 0,
+      "timestamp": 0
+    },
+    "movies": {
+      "movieId": 0,
+      "title": 0,
+      "genres": 0
+    }
+  },
+  "data_freshness_days": 666,
+  "validation_passed": true,
+  "timestamp": "2025-08-09 14:38:28.297951"
+}

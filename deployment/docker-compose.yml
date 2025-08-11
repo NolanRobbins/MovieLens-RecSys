@@ -1,0 +1,133 @@
+# Docker Compose for MovieLens Recommendation System
+version: '3.8'
+
+services:
+  # FastAPI Inference Service
+  api:
+    build: .
+    container_name: movielens-api
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=production
+      - MODEL_PATH=/app/models/hybrid_vae_best.pt
+      - DATA_PATH=/app/processed_data
+    volumes:
+      - ./processed_data:/app/processed_data:ro
+      - ./models:/app/models:ro
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+
+  # Streamlit Demo Interface
+  demo:
+    build: .
+    container_name: movielens-demo
+    command: streamlit run streamlit_demo.py --server.address 0.0.0.0 --server.port 8501
+    ports:
+      - "8501:8501"
+    environment:
+      - ENV=demo
+    volumes:
+      - ./processed_data:/app/processed_data:ro
+      - ./logs:/app/logs
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+
+  # ETL Pipeline (scheduled)
+  etl:
+    build: .
+    container_name: movielens-etl
+    command: python etl_pipeline.py --config etl_config.json
+    environment:
+      - ENV=production
+      - SCHEDULE_ENABLED=true
+    volumes:
+      - ./ml-32m:/app/ml-32m:ro
+      - ./processed_data:/app/processed_data
+      - ./logs:/app/logs
+    profiles:
+      - etl
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: movielens-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    profiles:
+      - cache
+
+  # Monitoring with Prometheus (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: movielens-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    profiles:
+      - monitoring
+
+  # Grafana for dashboards (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: movielens-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+volumes:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  default:
+    name: movielens-network

@@ -2,3 +2,6 @@ scikit-learn
 numpy
 pandas
 torch
+diskcache
+plotly
+streamlit

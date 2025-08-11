@@ -1,0 +1,29 @@
+{
+  "model_info": {
+    "model_path": "models/hybrid_vae_best.pt",
+    "device": "cpu",
+    "evaluation_time": 0.5592889785766602
+  },
+  "validation": {
+    "mse": 1.574333564555149,
+    "rmse": 1.2547244974715164,
+    "mae": 0.9917050188601017,
+    "r2": -0.3197328314765513,
+    "n_samples": 10000,
+    "prediction_mean": 3.4586293697357178,
+    "prediction_std": 0.6044022440910339,
+    "target_mean": 3.5619,
+    "target_std": 1.092208034213263
+  },
+  "test": {
+    "mse": 1.472461070483749,
+    "rmse": 1.2134500692174148,
+    "mae": 0.9585085223555565,
+    "r2": -0.3374221085286735,
+    "n_samples": 10000,
+    "prediction_mean": 3.4802024364471436,
+    "prediction_std": 0.5810911655426025,
+    "target_mean": 3.5929,
+    "target_std": 1.0492709802524798
+  },
+  "sample_recommendations": {

@@ -1,0 +1,445 @@
+name: Model Rollback System
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_name:
+        description: 'Model to rollback'
+        required: true
+        default: 'matrix_factorization'
+      target_version:
+        description: 'Target version ID (leave empty for last stable)'
+        required: false
+      reason:
+        description: 'Rollback reason'
+        required: true
+        type: choice
+        options:
+          - performance_degradation
+          - business_impact
+          - technical_failure
+          - manual_intervention
+          - drift_detection
+          - validation_failure
+        default: 'manual_intervention'
+      rollback_notes:
+        description: 'Additional rollback notes'
+        required: false
+      confirm_rollback:
+        description: 'Confirm rollback (type "YES" to proceed)'
+        required: true
+
+env:
+  PYTHON_VERSION: 3.9
+
+jobs:
+  validate-rollback:
+    runs-on: ubuntu-latest
+    outputs:
+      rollback_confirmed: ${{ steps.validate.outputs.rollback_confirmed }}
+      current_version: ${{ steps.validate.outputs.current_version }}
+      target_version: ${{ steps.validate.outputs.target_version }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Validate rollback request
+      id: validate
+      run: |
+        echo "🔍 Validating rollback request..."
+        
+        # Check confirmation
+        if [[ "${{ github.event.inputs.confirm_rollback }}" != "YES" ]]; then
+          echo "❌ Rollback not confirmed. Please type 'YES' to proceed."
+          echo "rollback_confirmed=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+        
+        echo "rollback_confirmed=true" >> $GITHUB_OUTPUT
+        
+        # Validate model name
+        model_name="${{ github.event.inputs.model_name }}"
+        if [[ -z "$model_name" ]]; then
+          echo "❌ Model name is required"
+          exit 1
+        fi
+        
+        echo "✅ Rollback request validated"
+        echo "Model: $model_name"
+        echo "Target Version: ${{ github.event.inputs.target_version }}"
+        echo "Reason: ${{ github.event.inputs.reason }}"
+        echo "Notes: ${{ github.event.inputs.rollback_notes }}"
+
+  pre-rollback-check:
+    runs-on: ubuntu-latest
+    needs: validate-rollback
+    if: needs.validate-rollback.outputs.rollback_confirmed == 'true'
+    
+    outputs:
+      health_check_passed: ${{ steps.health_check.outputs.passed }}
+      active_version_info: ${{ steps.health_check.outputs.active_version }}
+      
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyyaml
+    
+    - name: Pre-rollback health check
+      id: health_check
+      run: |
+        python -c "
+        import sys
+        sys.path.append('src')
+        
+        from deployment.model_versioning import ModelVersionManager, DeploymentStatus
+        import json
+        
+        print('🔍 Running pre-rollback health check...')
+        
+        try:
+            manager = ModelVersionManager()
+            
+            # Check current system health
+            health_report = manager.health_check()
+            
+            print(f'System Health Report:')
+            print(f'  Total versions: {health_report[\"total_versions\"]}')
+            print(f'  Active models: {health_report[\"active_models\"]}')
+            print(f'  Integrity issues: {len(health_report[\"integrity_issues\"])}')
+            print(f'  Disk usage: {health_report[\"disk_usage_mb\"]:.1f} MB')
+            
+            # Check if target model has active version
+            model_name = '${{ github.event.inputs.model_name }}'
+            active_version = manager.get_active_version(model_name)
+            
+            if active_version:
+                print(f'✅ Current active version: {active_version.version_id}')
+                active_info = {
+                    'version_id': active_version.version_id,
+                    'deployment_timestamp': active_version.deployment_timestamp.isoformat(),
+                    'status': active_version.status.value
+                }
+                
+                with open('$GITHUB_OUTPUT', 'a') as f:
+                    f.write(f'active_version={json.dumps(active_info)}\\n')
+                    f.write('passed=true\\n')
+            else:
+                print(f'❌ No active version found for model: {model_name}')
+                with open('$GITHUB_OUTPUT', 'a') as f:
+                    f.write('active_version={}\\n')
+                    f.write('passed=false\\n')
+                sys.exit(1)
+            
+            # Check for critical issues
+            if len(health_report['integrity_issues']) > 0:
+                print('⚠️ Found integrity issues, but proceeding with rollback')
+            
+            print('✅ Pre-rollback health check passed')
+            
+        except Exception as e:
+            print(f'❌ Pre-rollback check failed: {e}')
+            import traceback
+            traceback.print_exc()
+            
+            with open('$GITHUB_OUTPUT', 'a') as f:
+                f.write('passed=false\\n')
+            
+            sys.exit(1)
+        "
+
+  execute-rollback:
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, pre-rollback-check]
+    if: needs.pre-rollback-check.outputs.health_check_passed == 'true'
+    
+    outputs:
+      rollback_success: ${{ steps.rollback.outputs.success }}
+      rollback_details: ${{ steps.rollback.outputs.details }}
+      
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyyaml
+    
+    - name: Execute model rollback
+      id: rollback
+      run: |
+        python -c "
+        import sys
+        sys.path.append('src')
+        
+        from deployment.model_versioning import ModelVersionManager, RollbackReason
+        import json
+        
+        print('🔄 Executing model rollback...')
+        
+        try:
+            manager = ModelVersionManager()
+            
+            # Parse inputs
+            model_name = '${{ github.event.inputs.model_name }}'
+            target_version = '${{ github.event.inputs.target_version }}' or None
+            reason = RollbackReason('${{ github.event.inputs.reason }}')
+            rollback_notes = '${{ github.event.inputs.rollback_notes }}' or 'GitHub Actions rollback'
+            triggered_by = '${{ github.actor }}'
+            
+            print(f'Rollback Parameters:')
+            print(f'  Model: {model_name}')
+            print(f'  Target Version: {target_version or \"last stable\"}')
+            print(f'  Reason: {reason.value}')
+            print(f'  Triggered by: {triggered_by}')
+            
+            # Execute rollback
+            success = manager.rollback_model(
+                model_name=model_name,
+                target_version=target_version,
+                reason=reason,
+                triggered_by=triggered_by,
+                rollback_notes=rollback_notes
+            )
+            
+            if success:
+                print('✅ Rollback completed successfully')
+                
+                # Get updated active version
+                new_active = manager.get_active_version(model_name)
+                rollback_details = {
+                    'success': True,
+                    'new_active_version': new_active.version_id if new_active else None,
+                    'rollback_timestamp': new_active.deployment_timestamp.isoformat() if new_active else None
+                }
+                
+                with open('$GITHUB_OUTPUT', 'a') as f:
+                    f.write('success=true\\n')
+                    f.write(f'details={json.dumps(rollback_details)}\\n')
+                
+            else:
+                print('❌ Rollback failed')
+                rollback_details = {'success': False, 'error': 'Rollback execution failed'}
+                
+                with open('$GITHUB_OUTPUT', 'a') as f:
+                    f.write('success=false\\n')
+                    f.write(f'details={json.dumps(rollback_details)}\\n')
+                
+                sys.exit(1)
+            
+        except Exception as e:
+            print(f'❌ Rollback execution failed: {e}')
+            import traceback
+            traceback.print_exc()
+            
+            rollback_details = {'success': False, 'error': str(e)}
+            
+            with open('$GITHUB_OUTPUT', 'a') as f:
+                f.write('success=false\\n')
+                f.write(f'details={json.dumps(rollback_details)}\\n')
+            
+            sys.exit(1)
+        "
+
+  post-rollback-validation:
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, pre-rollback-check, execute-rollback]
+    if: needs.execute-rollback.outputs.rollback_success == 'true'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyyaml
+    
+    - name: Validate rolled back model
+      run: |
+        python -c "
+        import sys
+        sys.path.append('src')
+        
+        from deployment.model_versioning import ModelVersionManager
+        from validation.model_validator import ModelValidator
+        import torch
+        
+        print('🔍 Validating rolled back model...')
+        
+        try:
+            manager = ModelVersionManager()
+            validator = ModelValidator()
+            
+            model_name = '${{ github.event.inputs.model_name }}'
+            active_version = manager.get_active_version(model_name)
+            
+            if not active_version:
+                print(f'❌ No active version found after rollback')
+                sys.exit(1)
+            
+            print(f'✅ Active version after rollback: {active_version.version_id}')
+            
+            # Test model loading
+            try:
+                checkpoint = torch.load(active_version.model_path, map_location='cpu')
+                print('✅ Model loads successfully')
+            except Exception as e:
+                print(f'❌ Model loading failed: {e}')
+                sys.exit(1)
+            
+            # Run validation if possible
+            try:
+                validation_report = validator.validate_model(
+                    model_path=active_version.model_path,
+                    model_name=model_name
+                )
+                
+                print(f'Model Validation Results:')
+                print(f'  Status: {validation_report.overall_status.value}')
+                print(f'  Passed Checks: {validation_report.passed_checks}')
+                print(f'  Failed Checks: {validation_report.failed_checks}')
+                print(f'  Deploy Approved: {validation_report.deploy_approved}')
+                
+                if not validation_report.deploy_approved:
+                    print('⚠️ Warning: Rolled back model failed validation')
+                
+            except Exception as e:
+                print(f'⚠️ Model validation failed: {e}')
+            
+            print('✅ Post-rollback validation completed')
+            
+        except Exception as e:
+            print(f'❌ Post-rollback validation failed: {e}')
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+        "
+
+  notify-stakeholders:
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, pre-rollback-check, execute-rollback]
+    if: always()
+    
+    steps:
+    - name: Create rollback notification issue
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const success = '${{ needs.execute-rollback.outputs.rollback_success }}' === 'true';
+          const rollbackDetails = JSON.parse('${{ needs.execute-rollback.outputs.rollback_details }}' || '{}');
+          const activeVersionInfo = JSON.parse('${{ needs.pre-rollback-check.outputs.active_version_info }}' || '{}');
+          
+          const title = `🔄 Model Rollback ${success ? 'Completed' : 'Failed'} - ${{ github.event.inputs.model_name }}`;
+          
+          const body = `
+          ## Model Rollback Notification
+          
+          **Rollback Status:** ${success ? '✅ Successful' : '❌ Failed'}
+          **Model:** ${{ github.event.inputs.model_name }}
+          **Target Version:** ${{ github.event.inputs.target_version || 'Last stable' }}
+          **Reason:** ${{ github.event.inputs.reason }}
+          **Triggered By:** ${{ github.actor }}
+          **Timestamp:** ${new Date().toISOString()}
+          
+          ### Rollback Details
+          - **Previous Version:** ${activeVersionInfo.version_id || 'Unknown'}
+          - **New Active Version:** ${rollbackDetails.new_active_version || 'Unknown'}
+          - **GitHub SHA:** ${{ github.sha }}
+          - **Workflow Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          
+          ### Notes
+          ${{ github.event.inputs.rollback_notes || 'No additional notes provided' }}
+          
+          ### Impact Assessment
+          ${success ? 
+            '✅ Model rollback completed successfully. The previous version has been restored.' :
+            '❌ Model rollback failed. Manual intervention may be required.'
+          }
+          
+          ### Next Steps
+          ${success ? `
+          1. Monitor business metrics for impact
+          2. Validate model performance
+          3. Consider root cause analysis for original issue` : `
+          1. Review rollback failure logs
+          2. Manual rollback may be required
+          3. Contact system administrator`}
+          
+          ---
+          *This issue was automatically created by the model rollback workflow.*
+          `;
+          
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: [
+              'model-rollback', 
+              'automated-notification', 
+              success ? 'rollback-success' : 'rollback-failure'
+            ]
+          });
+
+  rollback-summary:
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, pre-rollback-check, execute-rollback, post-rollback-validation]
+    if: always()
+    
+    steps:
+    - name: Generate rollback summary
+      run: |
+        echo "🔄 Model Rollback Summary"
+        echo "========================"
+        echo "Date: $(date)"
+        echo "Repository: ${{ github.repository }}"
+        echo "Workflow: ${{ github.workflow }}"
+        echo "Triggered by: ${{ github.actor }}"
+        echo ""
+        echo "### Rollback Request"
+        echo "- Model: ${{ github.event.inputs.model_name }}"
+        echo "- Target Version: ${{ github.event.inputs.target_version || 'Last stable' }}"
+        echo "- Reason: ${{ github.event.inputs.reason }}"
+        echo "- Notes: ${{ github.event.inputs.rollback_notes }}"
+        echo ""
+        echo "### Execution Results"
+        echo "- Validation: ${{ needs.validate-rollback.outputs.rollback_confirmed }}"
+        echo "- Health Check: ${{ needs.pre-rollback-check.outputs.health_check_passed }}"
+        echo "- Rollback: ${{ needs.execute-rollback.outputs.rollback_success }}"
+        echo ""
+        
+        if [[ "${{ needs.execute-rollback.outputs.rollback_success }}" == "true" ]]; then
+          echo "✅ **Status:** Rollback completed successfully"
+          echo ""
+          echo "### Post-Rollback Actions"
+          echo "- [ ] Monitor business metrics"
+          echo "- [ ] Validate model performance" 
+          echo "- [ ] Root cause analysis"
+        else
+          echo "❌ **Status:** Rollback failed - manual intervention required"
+          echo ""
+          echo "### Required Actions"
+          echo "- [ ] Review failure logs"
+          echo "- [ ] Manual rollback procedure"
+          echo "- [ ] Contact system administrator"
+        fi

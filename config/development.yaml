@@ -1,0 +1,164 @@
+# Development Environment Configuration
+# Settings for local development and testing
+
+environment:
+  name: "development"
+  debug: true
+  testing: true
+  log_level: "DEBUG"
+
+# Development model serving
+model_serving:
+  host: "127.0.0.1"
+  port: 8501
+  max_workers: 2
+  timeout: 60  # Longer timeout for debugging
+  enable_cors: true
+
+# Development-friendly settings
+models:
+  model_cache_size: 1  # Lower memory usage
+  inference_timeout_ms: 200  # More lenient timeout
+  batch_size: 32  # Smaller batch size
+
+# Development data settings
+data:
+  enable_data_validation: true
+  max_missing_ratio: 0.10  # More tolerant for dev data
+  quality_threshold: 0.7   # Lower threshold for dev
+
+# Relaxed thresholds for development
+business_thresholds:
+  # More lenient thresholds for development
+  min_precision_at_10: 0.25
+  min_ndcg_at_10: 0.35
+  max_rmse: 1.0
+  min_diversity: 0.40
+  min_coverage: 0.50
+  
+  # Lower business impact requirements
+  min_revenue_impact: 100000
+  min_ctr_improvement: 0.02
+  min_session_duration_boost: 0.10
+  
+  # More lenient operational thresholds
+  max_inference_time_ms: 200.0
+  max_model_size_mb: 2000.0
+  min_training_stability: 0.80
+  max_training_time_hours: 4.0
+
+# Development monitoring (disabled for speed)
+monitoring:
+  enable_drift_detection: false
+  enable_data_quality_monitoring: false
+  enable_business_monitoring: false
+  
+  # Fast intervals for testing
+  quality_check_interval_hours: 1
+  
+  alert_email: "dev@localhost"
+  slack_webhook_url: ""
+
+# Development training settings
+training:
+  device: "cpu"  # Default to CPU for compatibility
+  mixed_precision: false
+  compile_model: false
+  
+  # Faster training for development
+  default_params:
+    batch_size: 512  # Smaller batches
+    learning_rate: 0.002  # Slightly higher LR
+    max_epochs: 20  # Fewer epochs
+    early_stopping_patience: 3
+    weight_decay: 0.0001
+    
+  # Smaller model dimensions for faster training
+  matrix_factorization:
+    embedding_dim: 32
+    reg_lambda: 0.01
+    
+  neural_cf:
+    embedding_dim: 32
+    hidden_dims: [64, 32, 16]
+    dropout: 0.3
+    
+  two_tower:
+    user_embedding_dim: 32
+    item_embedding_dim: 32
+    hidden_dim: 64
+    
+  hybrid_vae:
+    latent_dim: 16
+    encoder_dims: [64, 32]
+    decoder_dims: [32, 64]
+    beta: 0.1
+
+# No external services in development
+database:
+  enable_database: false
+
+caching:
+  enable_redis: false
+  enable_local_cache: true
+  local_cache_size: 500
+  local_cache_ttl: 60  # Short TTL for development
+
+# Relaxed security for development
+security:
+  enable_https: false
+  enable_rate_limiting: false
+  enable_cors: true
+  allowed_origins: ["http://localhost:3000", "http://127.0.0.1:3000"]
+  enable_auth: false
+
+# Verbose logging for development
+logging:
+  level: "DEBUG"
+  enable_json_logging: false
+  log_file: "logs/development.log"
+  
+  include_fields:
+    - "timestamp"
+    - "level"
+    - "logger" 
+    - "message"
+    - "file"
+    - "line"
+
+# Conservative resource usage
+performance:
+  max_threads: 2
+  enable_multiprocessing: false
+  max_memory_usage_gb: 2
+  max_concurrent_requests: 10
+  request_timeout: 60
+
+# Enable experimental features for development
+feature_flags:
+  enable_experimental_models: true
+  enable_ab_testing: false
+  enable_personalization: true
+  enable_cold_start_handling: true
+  enable_popularity_fallback: true
+  enable_diversity_boosting: true
+
+# Simple deployment for development
+deployment:
+  strategy: "replace"
+  min_replicas: 1
+  max_replicas: 1
+  enable_auto_rollback: false
+
+# No backup in development
+backup:
+  enable_model_backup: false
+  enable_cross_region_backup: false
+
+# Minimal compliance for development
+compliance:
+  enable_audit_logging: false
+  enable_data_lineage: false
+  user_data_retention_days: 30
+  model_retention_days: 7
+  log_retention_days: 7

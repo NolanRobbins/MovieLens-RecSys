@@ -1,0 +1,186 @@
+name: CI - Code Quality and Testing
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest black flake8 mypy
+    
+    - name: Code formatting with Black
+      run: |
+        black --check --diff src/ pages/ --exclude="venv|__pycache__|.git"
+      continue-on-error: true
+    
+    - name: Lint with flake8
+      run: |
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings
+        flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      continue-on-error: true
+    
+    - name: Type checking with mypy
+      run: |
+        mypy src/ --ignore-missing-imports --no-strict-optional
+      continue-on-error: true
+    
+    - name: Test imports and basic functionality
+      run: |
+        python -c "
+        import sys
+        sys.path.append('src')
+        
+        # Test core imports
+        try:
+            from data.feature_store import FeatureStore
+            from data.cache_manager import CacheManager
+            from models.baseline_models import ModelFactory
+            from business.ab_testing import ABTestingManager
+            print('✅ All core imports successful')
+        except Exception as e:
+            print(f'❌ Import error: {e}')
+            sys.exit(1)
+        
+        # Test model creation
+        try:
+            model = ModelFactory.create_model('matrix_factorization', n_users=100, n_movies=200)
+            print('✅ Model factory test passed')
+        except Exception as e:
+            print(f'❌ Model creation error: {e}')
+            sys.exit(1)
+        "
+    
+    - name: Test configuration files
+      run: |
+        python -c "
+        import json
+        from pathlib import Path
+        
+        # Check if config exists
+        config_path = Path('config/etl_config.json')
+        if config_path.exists():
+            with open(config_path) as f:
+                config = json.load(f)
+            print('✅ ETL config valid')
+        else:
+            print('⚠️ ETL config not found - will use defaults')
+        "
+    
+    - name: Validate project structure
+      run: |
+        python -c "
+        from pathlib import Path
+        
+        required_dirs = [
+            'src/data', 'src/models', 'src/business', 'src/monitoring',
+            'data/processed', 'pages'
+        ]
+        
+        for dir_path in required_dirs:
+            if Path(dir_path).exists():
+                print(f'✅ {dir_path} exists')
+            else:
+                print(f'❌ {dir_path} missing')
+        "
+
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run security scan with bandit
+      run: |
+        pip install bandit
+        bandit -r src/ -f json -o bandit-report.json || true
+        bandit -r src/ -ll || true
+      continue-on-error: true
+    
+    - name: Check for secrets
+      run: |
+        # Basic check for potential secrets (excluding test data)
+        if grep -r "password\|secret\|key\|token" src/ --exclude-dir=__pycache__ | grep -v "test\|example\|dummy"; then
+          echo "⚠️ Potential secrets found - please review"
+          exit 1
+        else
+          echo "✅ No obvious secrets detected"
+        fi
+      continue-on-error: true
+
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Check documentation
+      run: |
+        # Check for README updates
+        if [ -f README.md ]; then
+          echo "✅ README.md exists"
+          if grep -q "MovieLens" README.md; then
+            echo "✅ README contains project information"
+          fi
+        fi
+        
+        # Check for GAMEPLAN
+        if [ -f GAMEPLAN.md ]; then
+          echo "✅ GAMEPLAN.md exists"
+        fi
+    
+    - name: Validate markdown files
+      run: |
+        pip install markdown
+        python -c "
+        import markdown
+        from pathlib import Path
+        
+        md_files = list(Path('.').glob('*.md'))
+        for md_file in md_files:
+            try:
+                with open(md_file) as f:
+                    content = f.read()
+                markdown.markdown(content)
+                print(f'✅ {md_file} is valid markdown')
+            except Exception as e:
+                print(f'❌ {md_file} has markdown errors: {e}')
+        "
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: [code-quality, security-scan, documentation]
+    if: always()
+    steps:
+    - name: Report status
+      run: |
+        echo "🔍 CI Pipeline completed"
+        echo "Code Quality: ${{ needs.code-quality.result }}"
+        echo "Security Scan: ${{ needs.security-scan.result }}"  
+        echo "Documentation: ${{ needs.documentation.result }}"

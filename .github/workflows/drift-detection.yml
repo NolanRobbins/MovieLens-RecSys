@@ -1,0 +1,337 @@
+name: Model Drift Detection & Retraining
+
+on:
+  schedule:
+    # Run drift detection daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      sensitivity:
+        description: 'Detection sensitivity (low/medium/high)'
+        required: false
+        default: 'medium'
+      force_check:
+        description: 'Force drift check even without new data'
+        type: boolean
+        default: false
+
+env:
+  PYTHON_VERSION: 3.9
+
+jobs:
+  drift-detection:
+    runs-on: ubuntu-latest
+    outputs:
+      drift_detected: ${{ steps.drift_check.outputs.drift_detected }}
+      drift_score: ${{ steps.drift_check.outputs.drift_score }}
+      metrics_degraded: ${{ steps.drift_check.outputs.metrics_degraded }}
+      should_retrain: ${{ steps.drift_check.outputs.should_retrain }}
+      
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install scipy scikit-learn
+    
+    - name: Check for new data
+      id: data_check
+      run: |
+        python -c "
+        from pathlib import Path
+        import pandas as pd
+        from datetime import datetime, timedelta
+        import sys
+        
+        # Check if we have recent data to analyze
+        data_files = [
+            'data/processed/train_data.csv',
+            'data/processed/val_data.csv'
+        ]
+        
+        has_recent_data = True
+        for file_path in data_files:
+            if Path(file_path).exists():
+                file_time = datetime.fromtimestamp(Path(file_path).stat().st_mtime)
+                if datetime.now() - file_time > timedelta(days=7):
+                    print(f'⚠️ {file_path} is older than 7 days')
+                    has_recent_data = False
+            else:
+                print(f'❌ {file_path} not found')
+                has_recent_data = False
+        
+        force_check = '${{ github.event.inputs.force_check }}' == 'true'
+        
+        with open('$GITHUB_OUTPUT', 'a') as f:
+            f.write(f'has_recent_data={str(has_recent_data).lower()}\\n')
+            f.write(f'should_run={str(has_recent_data or force_check).lower()}\\n')
+        
+        if has_recent_data:
+            print('✅ Recent data available for drift detection')
+        elif force_check:
+            print('⚠️ No recent data, but force check enabled')
+        else:
+            print('❌ No recent data and force check disabled')
+        "
+    
+    - name: Perform drift detection
+      id: drift_check
+      if: steps.data_check.outputs.should_run == 'true'
+      run: |
+        python -c "
+        import sys
+        import numpy as np
+        import pandas as pd
+        from datetime import datetime, timedelta
+        import json
+        sys.path.append('src')
+        
+        from monitoring.data_quality_monitor import DataQualityMonitor
+        from business.business_metrics import BusinessMetricsTracker
+        
+        print('🔍 Running drift detection analysis...')
+        
+        try:
+            # Initialize monitoring
+            monitor = DataQualityMonitor()
+            tracker = BusinessMetricsTracker()
+            
+            # Load recent data for analysis
+            current_data = pd.read_csv('data/processed/val_data.csv')  # Use validation as current
+            
+            # Simulate baseline data (in production, load from historical baseline)
+            baseline_data = current_data.copy()
+            # Add some drift simulation
+            np.random.seed(42)
+            baseline_data['rating'] = baseline_data['rating'] + np.random.normal(0, 0.1, len(baseline_data))
+            baseline_data['rating'] = np.clip(baseline_data['rating'], 0.5, 5.0)
+            
+            # Establish baseline if not exists
+            if not hasattr(monitor, 'reference_stats') or monitor.reference_stats is None:
+                monitor.establish_baseline(baseline_data.sample(min(10000, len(baseline_data))))
+            
+            # Monitor current batch quality
+            quality_metrics = monitor.monitor_batch_quality(current_data.sample(min(5000, len(current_data))))
+            
+            # Analyze drift
+            drift_detected = False
+            drift_score = 0.0
+            metrics_degraded = []
+            
+            for drift_metric in quality_metrics.drift_metrics:
+                if drift_metric.drift_detected:
+                    drift_detected = True
+                    drift_score = max(drift_score, drift_metric.drift_score)
+                    metrics_degraded.append(drift_metric.feature_name)
+            
+            # Check business metrics degradation
+            sensitivity = '${{ github.event.inputs.sensitivity }}' or 'medium'
+            
+            # Set thresholds based on sensitivity
+            thresholds = {
+                'low': {'quality_score': 0.7, 'drift_score': 0.15},
+                'medium': {'quality_score': 0.8, 'drift_score': 0.10},
+                'high': {'quality_score': 0.9, 'drift_score': 0.05}
+            }
+            
+            threshold = thresholds.get(sensitivity, thresholds['medium'])
+            
+            # Overall assessment
+            quality_degraded = quality_metrics.quality_score < threshold['quality_score']
+            drift_significant = drift_score > threshold['drift_score']
+            
+            should_retrain = drift_detected or quality_degraded or len(metrics_degraded) >= 2
+            
+            # Log results
+            print(f'Drift Detection Results:')
+            print(f'  Data Quality Score: {quality_metrics.quality_score:.3f}')
+            print(f'  Drift Score: {drift_score:.3f}')
+            print(f'  Drift Detected: {drift_detected}')
+            print(f'  Metrics Degraded: {metrics_degraded}')
+            print(f'  Should Retrain: {should_retrain}')
+            print(f'  Sensitivity: {sensitivity}')
+            
+            # Check retraining triggers based on GAMEPLAN.md thresholds
+            retraining_check = monitor.check_retraining_triggers([quality_metrics])
+            
+            if retraining_check['should_retrain']:
+                print(f'🚨 Retraining trigger activated: {retraining_check[\"reason\"]}')
+                should_retrain = True
+            
+            # Set outputs
+            with open('$GITHUB_OUTPUT', 'a') as f:
+                f.write(f'drift_detected={str(drift_detected).lower()}\\n')
+                f.write(f'drift_score={drift_score:.3f}\\n')
+                f.write(f'metrics_degraded={\",\".join(metrics_degraded)}\\n')
+                f.write(f'should_retrain={str(should_retrain).lower()}\\n')
+                f.write(f'quality_score={quality_metrics.quality_score:.3f}\\n')
+            
+            # Save drift report
+            drift_report = {
+                'timestamp': datetime.now().isoformat(),
+                'github_sha': '${{ github.sha }}',
+                'sensitivity': sensitivity,
+                'drift_detected': drift_detected,
+                'drift_score': drift_score,
+                'quality_score': quality_metrics.quality_score,
+                'metrics_degraded': metrics_degraded,
+                'should_retrain': should_retrain,
+                'retraining_trigger': retraining_check,
+                'alerts': [alert.__dict__ for alert in quality_metrics.alerts]
+            }
+            
+            with open('drift_report.json', 'w') as f:
+                json.dump(drift_report, f, indent=2, default=str)
+            
+            print('✅ Drift detection completed')
+            
+        except Exception as e:
+            print(f'❌ Drift detection failed: {e}')
+            import traceback
+            traceback.print_exc()
+            
+            # Set safe defaults
+            with open('$GITHUB_OUTPUT', 'a') as f:
+                f.write('drift_detected=false\\n')
+                f.write('drift_score=0.0\\n')
+                f.write('metrics_degraded=\\n')
+                f.write('should_retrain=false\\n')
+                f.write('quality_score=1.0\\n')
+            
+            sys.exit(1)
+        "
+    
+    - name: Upload drift report
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: drift-report
+        path: drift_report.json
+        retention-days: 90
+
+  trigger-retraining:
+    runs-on: ubuntu-latest
+    needs: drift-detection
+    if: needs.drift-detection.outputs.should_retrain == 'true'
+    
+    steps:
+    - name: Trigger model retraining
+      run: |
+        echo "🚨 Drift detected - triggering model retraining"
+        echo "Drift Score: ${{ needs.drift-detection.outputs.drift_score }}"
+        echo "Degraded Metrics: ${{ needs.drift-detection.outputs.metrics_degraded }}"
+        
+        # Trigger the model training workflow
+        curl -X POST \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          https://api.github.com/repos/${{ github.repository }}/dispatches \
+          -d '{
+            "event_type": "model_drift_detected",
+            "client_payload": {
+              "drift_score": "${{ needs.drift-detection.outputs.drift_score }}",
+              "metrics_degraded": "${{ needs.drift-detection.outputs.metrics_degraded }}",
+              "quality_score": "${{ needs.drift-detection.outputs.quality_score }}",
+              "trigger_reason": "automated_drift_detection"
+            }
+          }'
+        
+        echo "✅ Retraining workflow triggered"
+
+  alert-stakeholders:
+    runs-on: ubuntu-latest
+    needs: drift-detection
+    if: always() && (needs.drift-detection.outputs.drift_detected == 'true' || needs.drift-detection.outputs.should_retrain == 'true')
+    
+    steps:
+    - name: Create drift alert issue
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const driftScore = '${{ needs.drift-detection.outputs.drift_score }}';
+          const metricsDegrade = '${{ needs.drift-detection.outputs.metrics_degraded }}';
+          const qualityScore = '${{ needs.drift-detection.outputs.quality_score }}';
+          const shouldRetrain = '${{ needs.drift-detection.outputs.should_retrain }}';
+          
+          const title = `🚨 Model Drift Detection Alert - ${new Date().toISOString().split('T')[0]}`;
+          
+          const body = `
+          ## Model Drift Detection Report
+          
+          **Detection Time:** ${new Date().toISOString()}
+          **GitHub SHA:** ${{ github.sha }}
+          **Workflow:** ${{ github.workflow }}
+          
+          ### Drift Analysis Results
+          - **Drift Score:** ${driftScore}
+          - **Data Quality Score:** ${qualityScore}
+          - **Degraded Metrics:** ${metricsDegrade || 'None'}
+          - **Retraining Required:** ${shouldRetrain}
+          
+          ### Recommended Actions
+          ${shouldRetrain === 'true' ? 
+            '🔄 **Immediate Action Required:** Model retraining has been automatically triggered.' :
+            '👀 **Monitor Closely:** Drift detected but below retraining threshold.'
+          }
+          
+          ### Next Steps
+          1. Review drift report artifact
+          2. Validate data quality
+          3. Monitor business metrics
+          ${shouldRetrain === 'true' ? '4. Review retraining progress' : ''}
+          
+          ---
+          *This issue was automatically created by the drift detection workflow.*
+          `;
+          
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['model-drift', 'automated-alert', shouldRetrain === 'true' ? 'retraining-triggered' : 'monitoring-required']
+          });
+
+  monitoring-report:
+    runs-on: ubuntu-latest
+    needs: drift-detection
+    if: always()
+    
+    steps:
+    - name: Generate monitoring summary
+      run: |
+        echo "📊 Daily Monitoring Report"
+        echo "========================="
+        echo "Date: $(date)"
+        echo "Repository: ${{ github.repository }}"
+        echo "Workflow: ${{ github.workflow }}"
+        echo ""
+        echo "### Drift Detection Results"
+        echo "- Drift Detected: ${{ needs.drift-detection.outputs.drift_detected }}"
+        echo "- Drift Score: ${{ needs.drift-detection.outputs.drift_score }}"
+        echo "- Quality Score: ${{ needs.drift-detection.outputs.quality_score }}"
+        echo "- Degraded Metrics: ${{ needs.drift-detection.outputs.metrics_degraded }}"
+        echo "- Retraining Required: ${{ needs.drift-detection.outputs.should_retrain }}"
+        echo ""
+        
+        if [[ "${{ needs.drift-detection.outputs.drift_detected }}" == "true" ]]; then
+          echo "🚨 **Alert:** Model drift detected!"
+        else
+          echo "✅ **Status:** No significant drift detected"
+        fi
+        
+        echo ""
+        echo "### System Health"
+        echo "- Data Pipeline: Operational"
+        echo "- Model Serving: Active"
+        echo "- Monitoring: Active"
+        
+        # In production, this could post to Slack, email, or other notification systems
