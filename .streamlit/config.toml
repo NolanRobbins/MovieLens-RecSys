@@ -1,26 +1,32 @@
 [global]
 # Production configuration for Streamlit Cloud
 developmentMode = false
+dataFrameSerialization = "legacy"
 
 [server]
 headless = true
 enableCORS = false
+enableXsrfProtection = true
 port = 8501
-maxUploadSize = 1000
+maxUploadSize = 200
+maxMessageSize = 200
+runOnSave = false
 
 [browser]
 gatherUsageStats = false
-showErrorDetails = true
+showErrorDetails = false
 
 [theme]
 primaryColor = "#FF6B6B"
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F0F2F6"
 textColor = "#262730"
+font = "sans serif"
 
 [client]
-toolbarMode = "minimal"
-showErrorDetails = true
+toolbarMode = "viewer"
+caching = true
 
 [logger]
 level = "info"
+messageFormat = "%(asctime)s %(levelname)s: %(message)s"

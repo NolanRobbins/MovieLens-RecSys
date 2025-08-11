@@ -1,0 +1,72 @@
+groups:
+  - name: movielens_alerts
+    rules:
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, rate(streamlit_http_request_duration_seconds_bucket[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: movielens-app
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile latency is {{ $value }}s (above 50ms threshold)"
+
+      - alert: HighErrorRate
+        expr: rate(streamlit_http_requests_total{status=~"5.."}[5m]) > 0.01
+        for: 2m
+        labels:
+          severity: critical
+          service: movielens-app
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} (above 1% threshold)"
+
+      - alert: ApplicationDown
+        expr: up{job="movielens-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: movielens-app
+        annotations:
+          summary: "MovieLens application is down"
+          description: "The MovieLens application has been down for more than 1 minute"
+
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis cache is down"
+          description: "Redis cache has been down for more than 1 minute"
+
+      - alert: HighMemoryUsage
+        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: movielens-app
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value | humanizePercentage }} (above 80% threshold)"
+
+      - alert: ModelPerformanceDegradation
+        expr: model_performance_score < 0.85
+        for: 10m
+        labels:
+          severity: warning
+          service: ml-model
+        annotations:
+          summary: "Model performance degradation detected"
+          description: "Model performance score is {{ $value }} (below 0.85 threshold)"
+
+      - alert: ValidationTestFailure
+        expr: system_validation_tests_passed < 7
+        for: 1m
+        labels:
+          severity: critical
+          service: system-validation
+        annotations:
+          summary: "System validation tests failing"
+          description: "Only {{ $value }} out of 7 validation tests are passing"
