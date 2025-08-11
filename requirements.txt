@@ -5,3 +5,8 @@ torch
 diskcache
 plotly
 streamlit
+pyyaml
+sqlalchemy
+requests
+tqdm
+scipy
