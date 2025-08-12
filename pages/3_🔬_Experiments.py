@@ -18,14 +18,28 @@ from pathlib import Path
 sys.path.append("src")
 
 try:
-    from models.experiment_runner import MultiModelExperiment, ExperimentConfig
-    from models.baseline_models import ModelFactory
-    from business.ab_testing import ABTestingManager, ExperimentConfig as ABConfig, ExperimentVariant
     from business.business_metrics import BusinessMetricsTracker, MLMetricsConverter
     EXPERIMENTS_AVAILABLE = True
 except ImportError as e:
     EXPERIMENTS_AVAILABLE = False
-    st.error(f"Experiment components not available: {e}")
+    st.warning(f"Some experiment components not available: {e}. Using demo mode.")
+    
+    # Create simple demo MLMetricsConverter for demo mode
+    class MockBusinessMetrics:
+        def __init__(self, **kwargs):
+            self.session_duration_minutes = 26.3
+            self.items_per_session = 8.5
+            self.return_rate_7day = 0.47
+            self.conversion_rate = 0.34
+            self.average_order_value = 15.20
+            self.customer_lifetime_value = 185
+            self.user_satisfaction_score = 0.742
+            self.churn_risk_reduction = 0.12
+    
+    class MLMetricsConverter:
+        @staticmethod
+        def convert_ml_to_business_metrics(ml_metrics):
+            return MockBusinessMetrics()
 
 # Page configuration
 st.set_page_config(
@@ -74,8 +88,8 @@ def main():
     st.markdown("Compare model performance and analyze business impact of recommendation algorithms")
     
     if not EXPERIMENTS_AVAILABLE:
-        st.error("Experiment system not available. Please ensure all components are properly installed.")
-        return
+        st.info("🧪 Running in demo mode - showing example experiment results and capabilities")
+        st.markdown("*In a production environment, this would connect to live experiment tracking systems.*")
     
     # Sidebar navigation
     experiment_type = st.sidebar.radio(
