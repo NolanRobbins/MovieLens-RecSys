@@ -32,19 +32,21 @@ ENV/
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
 
-# Dataset files (too large for git)
-ml-32m/
+# Dataset files (too large for git - raw data only)
+data/raw/ml-32m/
 ml-32m.zip
 *.zip
-train_data.csv
-val_data.csv
-data_mappings.pkl
 
-# Model files
+# Large model files (but allow smaller processed data)
 *.pt
 *.pth
-models/
-*.pkl
+data/models/*.pt
+data/models/*.pth
+
+# Allow processed data files needed for Streamlit Cloud
+!data/processed/*.csv
+!data/processed/*.pkl
+!data/processed/*.json
 
 # IDE
 .vscode/
@@ -60,7 +62,7 @@ Thumbs.db
 # Weights & Biases
 wandb/
 
-# Large data files
-*.csv
-*.tsv
-*.parquet
+# Large data files (but allow processed data)
+data/raw/*.csv
+data/raw/*.tsv
+data/raw/*.parquet
