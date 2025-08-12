@@ -199,26 +199,38 @@ def render_model_comparison():
     
     with col1:
         # Training time vs performance
+        efficiency_data = pd.DataFrame({
+            'Training Time (s)': [result['training_time'] for result in model_results],
+            'Precision@10': [result['metrics']['precision_at_10'] for result in model_results],
+            'Parameters (K)': [result['param_count']/1000 for result in model_results],
+            'Model': [result['name'] for result in model_results]
+        })
+        
         fig_efficiency = px.scatter(
-            x=[result['training_time'] for result in model_results],
-            y=[result['metrics']['precision_at_10'] for result in model_results],
-            size=[result['param_count']/1000 for result in model_results],
-            color=[result['name'] for result in model_results],
+            efficiency_data,
+            x='Training Time (s)',
+            y='Precision@10',
+            size='Parameters (K)',
+            color='Model',
             title="Training Efficiency: Time vs Performance",
-            labels={'x': 'Training Time (seconds)', 'y': 'Precision@10'},
-            hover_data={'size': True}
+            hover_data=['Parameters (K)']
         )
-        fig_efficiency.update_traces(hovertemplate='<b>%{color}</b><br>Training Time: %{x:.1f}s<br>Precision@10: %{y:.3f}<br>Parameters: %{marker.size:.0f}K')
+        fig_efficiency.update_traces(hovertemplate='<b>%{color}</b><br>Training Time: %{x:.1f}s<br>Precision@10: %{y:.3f}<br>Parameters: %{customdata[0]:.0f}K')
         st.plotly_chart(fig_efficiency, use_container_width=True)
     
     with col2:
         # Business impact comparison
+        business_data = pd.DataFrame({
+            'Model': [result['name'] for result in model_results],
+            'Revenue Impact ($)': [result['revenue_impact'] for result in model_results]
+        })
+        
         fig_business = px.bar(
-            x=[result['name'] for result in model_results],
-            y=[result['revenue_impact'] for result in model_results],
+            business_data,
+            x='Model',
+            y='Revenue Impact ($)',
             title="Projected Annual Revenue Impact",
-            labels={'x': 'Model', 'y': 'Revenue Impact ($)'},
-            color=[result['revenue_impact'] for result in model_results],
+            color='Revenue Impact ($)',
             color_continuous_scale='Greens'
         )
         fig_business.update_traces(hovertemplate='<b>%{x}</b><br>Revenue Impact: $%{y:,.0f}')
@@ -424,11 +436,16 @@ def render_business_impact():
         revenue_impact = annual_sessions * revenue_per_session * lift * 2.8
         roi_values.append(revenue_impact / 1000000)  # In millions
     
+    sensitivity_data = pd.DataFrame({
+        'Click-Through Rate': ctr_range,
+        'Annual Revenue Impact ($M)': roi_values
+    })
+    
     fig_sensitivity = px.line(
-        x=ctr_range,
-        y=roi_values,
-        title="Revenue Impact Sensitivity to CTR Changes",
-        labels={'x': 'Click-Through Rate', 'y': 'Annual Revenue Impact ($M)'}
+        sensitivity_data,
+        x='Click-Through Rate',
+        y='Annual Revenue Impact ($M)',
+        title="Revenue Impact Sensitivity to CTR Changes"
     )
     
     fig_sensitivity.add_vline(x=current_ctr, line_dash="dash", annotation_text="Current CTR")
