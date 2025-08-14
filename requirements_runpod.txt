@@ -26,3 +26,5 @@ ipywidgets>=8.0.0
 # Performance monitoring
 psutil>=5.9.0
 py3nvml>=0.2.7
+GPUtil>=1.4.0
+nvidia-ml-py3>=7.352.0
