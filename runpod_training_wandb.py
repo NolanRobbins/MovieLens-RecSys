@@ -310,19 +310,26 @@ def train_epoch(model, train_loader, optimizer, scaler, epoch, config, gpu_monit
             loss, recon_loss, kl_loss = loss_result
         
         # Backward pass
-        scaler.scale(loss).backward()
-        
-        # Gradient clipping
-        scaler.unscale_(optimizer)
-        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        
-        # Check for gradient issues
-        if torch.isnan(grad_norm) or torch.isinf(grad_norm):
-            logger.warning(f"Gradient issue detected at epoch {epoch}, batch {batch_idx}")
-            continue
-            
-        scaler.step(optimizer)
-        scaler.update()
+        if scaler:
+            scaler.scale(loss).backward()
+            # Gradient clipping
+            scaler.unscale_(optimizer)
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            # Check for gradient issues
+            if torch.isnan(grad_norm) or torch.isinf(grad_norm):
+                logger.warning(f"Gradient issue detected at epoch {epoch}, batch {batch_idx}")
+                continue
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            # Gradient clipping
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            # Check for gradient issues
+            if torch.isnan(grad_norm) or torch.isinf(grad_norm):
+                logger.warning(f"Gradient issue detected at epoch {epoch}, batch {batch_idx}")
+                continue
+            optimizer.step()
         
         # Accumulate losses
         total_loss += loss.item()
