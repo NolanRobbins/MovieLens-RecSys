@@ -38,11 +38,11 @@ logger = logging.getLogger(__name__)
 
 class A100OptimizedHybridVAE(nn.Module):
     """
-    A100-Optimized Hybrid VAE with comprehensive W&B logging
+    A100-Optimized Hybrid VAE V2 - Enhanced Regularization for RMSE ≤ 0.55
     """
     
-    def __init__(self, n_users, n_movies, n_factors=160, hidden_dims=[640, 384, 192], 
-                 latent_dim=80, dropout_rate=0.38):
+    def __init__(self, n_users, n_movies, n_factors=200, hidden_dims=[1024, 512, 256, 128], 
+                 latent_dim=128, dropout_rate=0.4):
         super(A100OptimizedHybridVAE, self).__init__()
         
         self.n_users = n_users
@@ -215,15 +215,15 @@ class GPUMonitor:
 def setup_wandb(config):
     """Initialize W&B with comprehensive config"""
     
-    # Enhanced run name with timestamp and key config
-    run_name = f"a100-experiment-{datetime.now().strftime('%m%d-%H%M')}-rmse{config.get('target_rmse', '0.55')}"
+    # Enhanced V2 run name with experiment details
+    run_name = f"a100-enhanced-v2-{datetime.now().strftime('%m%d-%H%M')}-target{config.get('target_rmse', '0.55')}"
     
     wandb.init(
-        project="movielens-hybrid-vae-a100",
+        project="movielens-hybrid-vae-enhanced-v2",
         name=run_name,
         config=config,
-        tags=["a100", "runpod", "hybrid-vae", "production", "optimized"],
-        notes=f"A100 training targeting RMSE {config.get('target_rmse', '0.55')} with enhanced monitoring"
+        tags=["a100", "runpod", "hybrid-vae-v2", "advanced-regularization", "targeting-0.55"],
+        notes=f"Enhanced V2: Advanced regularization targeting RMSE ≤ {config.get('target_rmse', '0.55')} with deeper architecture, label smoothing, free bits, and cosine beta scheduling"
     )
     
     # Log system info
@@ -246,24 +246,38 @@ def setup_wandb(config):
     
     return wandb
 
-def vae_loss(predictions, targets, mu, logvar, kl_weight=0.008, beta_annealing=1.0):
+def enhanced_vae_loss(predictions, targets, mu, logvar, kl_weight=0.1, beta_annealing=1.0, 
+                     label_smoothing=0.1, free_bits=2.0):
     """
-    VAE loss with numerical stability and comprehensive logging
+    Enhanced VAE loss V2 with advanced regularization techniques
     """
-    # Reconstruction loss
-    recon_loss = F.mse_loss(predictions.squeeze(), targets, reduction='mean')
+    batch_size = predictions.size(0)
     
-    # KL divergence with numerical stability
-    kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
-    kl_loss = torch.clamp(kl_loss, 0, 100)  # Prevent explosion
+    # Enhanced reconstruction loss with label smoothing
+    if label_smoothing > 0:
+        target_mean = targets.mean()
+        smoothed_targets = (1 - label_smoothing) * targets + label_smoothing * target_mean
+        recon_loss = F.mse_loss(predictions.squeeze(), smoothed_targets, reduction='mean')
+    else:
+        recon_loss = F.mse_loss(predictions.squeeze(), targets, reduction='mean')
     
-    # Apply annealing and weighting
+    # KL divergence with free bits regularization
+    kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1)
+    
+    # Apply free bits: only penalize KL above threshold
+    kl_loss = torch.maximum(kl_loss, torch.tensor(free_bits).to(kl_loss.device))
+    kl_loss = kl_loss.mean()
+    
+    # Clamp for numerical stability
+    kl_loss = torch.clamp(kl_loss, 0, 100)
+    
+    # Apply beta scheduling and weighting
     weighted_kl = kl_weight * beta_annealing * kl_loss
     total_loss = recon_loss + weighted_kl
     
     # Check for NaN
     if torch.isnan(total_loss) or torch.isinf(total_loss):
-        logger.error("NaN/Inf detected in loss computation!")
+        logger.error("NaN/Inf detected in enhanced loss computation!")
         return None, recon_loss, kl_loss
     
     return total_loss, recon_loss, kl_loss
@@ -276,11 +290,18 @@ def train_epoch(model, train_loader, optimizer, scaler, epoch, config, gpu_monit
     total_kl = 0
     num_batches = 0
     
-    # Beta annealing for KL weight
-    kl_warmup_epochs = config.get('kl_warmup_epochs', 20)
+    # Enhanced beta scheduling (cosine annealing)
+    kl_warmup_epochs = config.get('kl_warmup_epochs', 50)
+    kl_weight_start = config.get('kl_weight_start', 0.001)
+    kl_weight_end = config.get('kl_weight_end', 0.5)
+    
     if epoch < kl_warmup_epochs:
-        beta_annealing = epoch / kl_warmup_epochs
+        progress = epoch / kl_warmup_epochs
+        # Cosine annealing for smoother transition
+        kl_weight = kl_weight_start + (kl_weight_end - kl_weight_start) * (1 + np.cos(np.pi * (1 - progress))) / 2
+        beta_annealing = progress
     else:
+        kl_weight = kl_weight_end
         beta_annealing = 1.0
     
     start_time = time.time()
@@ -294,13 +315,25 @@ def train_epoch(model, train_loader, optimizer, scaler, epoch, config, gpu_monit
         
         optimizer.zero_grad()
         
-        # Forward pass with mixed precision
-        with autocast():
+        # Forward pass
+        if scaler:
+            with autocast():
+                predictions, mu, logvar = model(users, movies)
+                loss_result = enhanced_vae_loss(
+                    predictions, y_batch, mu, logvar, 
+                    kl_weight=kl_weight, 
+                    beta_annealing=beta_annealing,
+                    label_smoothing=config.get('label_smoothing', 0.1),
+                    free_bits=config.get('free_bits', 2.0)
+                )
+        else:
             predictions, mu, logvar = model(users, movies)
-            loss_result = vae_loss(
+            loss_result = enhanced_vae_loss(
                 predictions, y_batch, mu, logvar, 
-                kl_weight=config['kl_weight'], 
-                beta_annealing=beta_annealing
+                kl_weight=kl_weight, 
+                beta_annealing=beta_annealing,
+                label_smoothing=config.get('label_smoothing', 0.1),
+                free_bits=config.get('free_bits', 2.0)
             )
             
             if loss_result[0] is None:  # NaN detected
@@ -400,10 +433,12 @@ def validate_epoch(model, val_loader, epoch, config, gpu_monitor):
             
             with autocast():
                 predictions, mu, logvar = model(users, movies)
-                loss_result = vae_loss(
+                loss_result = enhanced_vae_loss(
                     predictions, y_batch, mu, logvar, 
-                    kl_weight=config['kl_weight'], 
-                    beta_annealing=1.0
+                    kl_weight=config.get('kl_weight_end', 0.5), 
+                    beta_annealing=1.0,
+                    label_smoothing=config.get('label_smoothing', 0.1),
+                    free_bits=config.get('free_bits', 2.0)
                 )
                 
                 if loss_result[0] is None:
@@ -461,26 +496,32 @@ def validate_epoch(model, val_loader, epoch, config, gpu_monitor):
 def main():
     """Main training function with full W&B integration"""
     
-    # Enhanced configuration for A100 optimization
+    # Enhanced V2 Configuration - Targeting RMSE ≤ 0.55
     config = {
-        # Model architecture (based on experiment_2 success)
-        'n_factors': 160,
-        'hidden_dims': [640, 384, 192],
-        'latent_dim': 80,
-        'dropout_rate': 0.38,
+        # Model architecture (Enhanced V2)
+        'n_factors': 200,  # Increased capacity
+        'hidden_dims': [1024, 512, 256, 128],  # Deeper architecture
+        'latent_dim': 128,  # Larger latent space
+        'dropout_rate': 0.4,  # Aggressive regularization
         
-        # Training parameters (A100 optimized)
-        'batch_size': 6144,  # Large batch for A100
-        'n_epochs': 100,
-        'lr': 2e-4,  # Conservative start
-        'weight_decay': 1e-5,
-        'kl_weight': 0.008,  # Very low (critical for stability)
-        'kl_warmup_epochs': 20,
-        'patience': 15,
-        'target_rmse': 0.55,
+        # Training parameters (Advanced regularization)
+        'batch_size': 2048,  # Larger batches for better gradient estimates
+        'n_epochs': 200,  # More epochs with better regularization
+        'lr': 3e-4,  # Lower learning rate for stability
+        'weight_decay': 1e-4,  # Stronger L2 regularization
+        'kl_weight_start': 0.001,  # Beta scheduling - start low
+        'kl_weight_end': 0.5,    # Beta scheduling - end higher
+        'kl_warmup_epochs': 50,  # Gradual KL increase
+        'patience': 25,  # More patience with better regularization
+        'target_rmse': 0.55,  # Target RMSE ≤ 0.55
+        
+        # Advanced regularization
+        'label_smoothing': 0.1,  # Label smoothing for ratings
+        'mixup_alpha': 0.2,  # Mixup data augmentation
+        'free_bits': 2.0,  # Prevent posterior collapse
         
         # A100 optimizations
-        'mixed_precision': False,
+        'mixed_precision': True,  # Enable for V2
         'tf32_enabled': True,
         'gradient_clipping': True,
         'num_workers': 8,
@@ -490,6 +531,10 @@ def main():
         'log_interval': 100,
         'save_interval': 10,
         'gpu_monitoring': True,
+        
+        # Version tracking
+        'version': 'v2',
+        'experiment_name': 'Enhanced Regularization - Targeting RMSE 0.55'
     }
     
     print("🚀 Starting A100-Optimized Hybrid VAE Training with W&B")
