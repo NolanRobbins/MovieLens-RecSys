@@ -86,21 +86,30 @@ mkdir -p "$MODELS_DIR/checkpoints" "$MODELS_DIR/artifacts"
 log_success "Directories created"
 echo ""
 
-# Step 5: Data Validation
-log_info "Step 5: Validating data files..."
+# Step 5: Data Download from Google Drive
+log_info "Step 5: Downloading data files from Google Drive..."
+pip install gdown --quiet
+
+mkdir -p "$DATA_DIR/processed"
+
 if [ ! -f "$DATA_DIR/processed/train_data.csv" ]; then
-    log_warning "Training data not found in $DATA_DIR/processed/"
-    log_info "Please upload your data files:"
-    echo "   - $DATA_DIR/processed/train_data.csv"
-    echo "   - $DATA_DIR/processed/val_data.csv" 
-    echo "   - $DATA_DIR/processed/data_mappings.pkl"
-    echo ""
-    echo "You can upload via:"
-    echo "   1. Runpod web interface"
-    echo "   2. SCP: scp -r data/processed/* runpod-ip:$DATA_DIR/processed/"
-    echo "   3. rsync: rsync -av data/processed/ runpod-ip:$DATA_DIR/processed/"
-    echo ""
-    read -p "Press Enter after uploading data files..."
+    log_info "Downloading training data files from Google Drive..."
+    
+    # Download train_data.csv (291MB)
+    log_info "Downloading train_data.csv..."
+    gdown "https://drive.google.com/uc?id=1cNyAUmJ81erOW_YSAWT1_xNhsj7JG361" -O "$DATA_DIR/processed/train_data.csv"
+    
+    # Download val_data.csv (73MB)  
+    log_info "Downloading val_data.csv..."
+    gdown "https://drive.google.com/uc?id=1Yar-2nQRHuW7srknw48I8cT8AoQotSAb" -O "$DATA_DIR/processed/val_data.csv"
+    
+    # Download data_mappings.pkl (3.4MB)
+    log_info "Downloading data_mappings.pkl..."
+    gdown "https://drive.google.com/uc?id=1ngS42tO5U37p09Mw_L6TEZ7w9mR0FsKB" -O "$DATA_DIR/processed/data_mappings.pkl"
+    
+    log_success "All data files downloaded from Google Drive"
+else
+    log_info "Data files already exist, skipping download"
 fi
 
 # Run data preparation if available
