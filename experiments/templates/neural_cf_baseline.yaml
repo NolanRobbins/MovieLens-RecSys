@@ -1,0 +1,72 @@
+# Neural Collaborative Filtering Baseline Template
+# Standard configuration for Neural CF experiments
+
+metadata:
+  name: "neural_cf_baseline"
+  description: "Neural Collaborative Filtering baseline configuration"
+  version: "1.0"
+  tags: ["neural_cf", "baseline", "collaborative_filtering"]
+  author: "ML Team"
+
+# Model architecture
+model:
+  type: "neural_cf"
+  architecture:
+    embedding_dim: 64
+    hidden_dims: [128, 64, 32]
+    dropout_rate: 0.2
+    use_batch_norm: false
+    activation: "relu"
+
+# Training configuration
+training:
+  # Optimizer settings
+  optimizer: "adam"
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  betas: [0.9, 0.999]
+  
+  # Training schedule
+  batch_size: 1024
+  max_epochs: 50
+  early_stopping_patience: 10
+  
+  # Loss function
+  loss_function: "mse"
+  
+  # Regularization
+  label_smoothing: 0.0
+  dropout_schedule: "constant"
+
+# Data configuration
+data:
+  dataset_version: "v1.0"
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  min_user_interactions: 20
+  min_item_interactions: 5
+  rating_threshold: 3.0
+  negative_sampling_ratio: 4
+
+# Target metrics
+targets:
+  rmse: 0.80
+  precision_at_10: 0.30
+  ndcg_at_10: 0.38
+  diversity: 0.45
+  coverage: 0.55
+
+# Resource requirements
+resources:
+  gpu_type: "T4"
+  memory_gb: 16
+  max_training_hours: 2
+  mixed_precision: false
+
+# Experiment tracking
+tracking:
+  wandb_project: "movielens-neural-cf"
+  log_frequency: 100
+  save_checkpoints: true
+  checkpoint_frequency: 10

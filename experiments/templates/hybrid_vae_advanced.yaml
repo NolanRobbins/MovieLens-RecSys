@@ -1,0 +1,98 @@
+# Hybrid VAE Advanced Template
+# Advanced configuration with regularization and optimization
+
+metadata:
+  name: "hybrid_vae_advanced"
+  description: "Advanced Hybrid VAE with regularization targeting RMSE ≤ 0.55"
+  version: "2.0"
+  tags: ["hybrid_vae", "advanced", "regularization", "deep_architecture"]
+  author: "ML Team"
+
+# Model architecture
+model:
+  type: "hybrid_vae"
+  architecture:
+    n_factors: 200
+    hidden_dims: [1024, 512, 256, 128]
+    latent_dim: 128
+    dropout_rate: 0.4
+    use_batch_norm: true
+    use_layer_norm: true
+
+# Training configuration
+training:
+  # Advanced optimizer
+  optimizer: "adamw"
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  betas: [0.9, 0.999]
+  amsgrad: true
+  
+  # Training schedule
+  batch_size: 2048
+  max_epochs: 200
+  early_stopping_patience: 25
+  
+  # Learning rate scheduling
+  lr_scheduler: "cosine_with_warmup"
+  warmup_epochs: 10
+  min_lr_ratio: 0.01
+  restart_period: 50
+  
+  # VAE specific
+  kl_weight: 0.01
+  beta_schedule: "cosine_annealing"
+  beta_min: 0.001
+  beta_max: 0.5
+  free_bits: 2.0
+  
+  # Advanced regularization
+  label_smoothing: 0.1
+  mixup_alpha: 0.2
+  cutmix_alpha: 0.3
+  noise_factor: 0.05
+  
+  # Gradient optimization
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 1
+
+# Data configuration
+data:
+  dataset_version: "v1.0"
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  min_user_interactions: 20
+  min_item_interactions: 5
+  rating_threshold: 3.0
+  
+  # Data augmentation
+  enable_augmentation: true
+  augmentation_probability: 0.3
+
+# Target metrics
+targets:
+  rmse: 0.55
+  precision_at_10: 0.40
+  ndcg_at_10: 0.45
+  diversity: 0.55
+  coverage: 0.65
+
+# Resource requirements
+resources:
+  gpu_type: "A100"
+  memory_gb: 64
+  max_training_hours: 8
+  mixed_precision: true
+
+# Experiment tracking
+tracking:
+  wandb_project: "movielens-hybrid-vae-advanced"
+  log_frequency: 50
+  save_checkpoints: true
+  checkpoint_frequency: 5
+  
+  # Enhanced monitoring
+  log_gradients: true
+  log_weights: false
+  log_predictions: true

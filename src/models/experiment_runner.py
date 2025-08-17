@@ -315,8 +315,8 @@ class MultiModelExperiment:
         
         # Load data once for all models
         train_loader, val_loader, mappings = self.trainer.load_data()
-        n_users = len(mappings['user_to_idx'])
-        n_movies = len(mappings['movie_to_idx'])
+        n_users = len(mappings['user_to_index'])
+        n_movies = len(mappings['movie_to_index'])
         
         experiment_start = time.time()
         

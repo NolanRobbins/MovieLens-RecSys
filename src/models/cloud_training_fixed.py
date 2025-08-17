@@ -159,8 +159,18 @@ def create_data_loaders(data_path, batch_size=1024):
     
     print(f"Training samples: {len(train_df):,}")
     print(f"Validation samples: {len(val_df):,}")
-    print(f"Users: {len(mappings['user_to_idx']):,}")
-    print(f"Movies: {len(mappings['movie_to_idx']):,}")
+    print(f"Users: {len(mappings['user_to_index']):,}")
+    print(f"Movies: {len(mappings['movie_to_index']):,}")
+    
+    # Map user_id and movie_id to indices using the mappings
+    train_df['user_idx'] = train_df['user_id'].map(mappings['user_to_index'])
+    train_df['movie_idx'] = train_df['movie_id'].map(mappings['movie_to_index'])
+    val_df['user_idx'] = val_df['user_id'].map(mappings['user_to_index'])
+    val_df['movie_idx'] = val_df['movie_id'].map(mappings['movie_to_index'])
+    
+    # Filter out any unmapped values
+    train_df = train_df.dropna(subset=['user_idx', 'movie_idx'])
+    val_df = val_df.dropna(subset=['user_idx', 'movie_idx'])
     
     # Create datasets
     train_x = torch.tensor(train_df[['user_idx', 'movie_idx']].values, dtype=torch.long)
@@ -175,8 +185,8 @@ def create_data_loaders(data_path, batch_size=1024):
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=2)
     
-    n_users = len(mappings['user_to_idx'])
-    n_movies = len(mappings['movie_to_idx'])
+    n_users = len(mappings['user_to_index'])
+    n_movies = len(mappings['movie_to_index'])
     
     return train_loader, val_loader, n_users, n_movies
 

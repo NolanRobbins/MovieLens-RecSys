@@ -1,0 +1,47 @@
+{
+  "experiment_id": "hybrid_vae_v1_20250815_140527",
+  "experiment_name": "Baseline Hybrid VAE - First Successful Training",
+  "version": "v1",
+  "timestamp": "2025-08-15T14:05:27.022166",
+  "model_type": "ModelType.HYBRID_VAE",
+  "model_architecture": {
+    "n_factors": 150,
+    "hidden_dims": [
+      512,
+      256
+    ],
+    "latent_dim": 64,
+    "dropout_rate": 0.3
+  },
+  "hyperparameters": {
+    "batch_size": 1024,
+    "lr": 0.0005,
+    "weight_decay": 1e-05,
+    "kl_weight": 0.1,
+    "epochs": 100
+  },
+  "target_rmse": 0.55,
+  "achieved_rmse": null,
+  "other_metrics": {},
+  "epochs_trained": 0,
+  "training_time_hours": 0.0,
+  "gpu_type": "unknown",
+  "batch_size": 1024,
+  "dataset_version": "v1.0",
+  "train_samples": 0,
+  "val_samples": 0,
+  "test_samples": null,
+  "status": "ExperimentStatus.PLANNED",
+  "notes": "First successful training run after fixing major issues. Achieved 0.806 RMSE but shows overfitting.",
+  "tags": [
+    "baseline",
+    "v1",
+    "overfitting",
+    "needs_regularization"
+  ],
+  "model_path": null,
+  "config_path": null,
+  "wandb_run_id": null,
+  "improvement_over_baseline": null,
+  "rank_among_experiments": null
+}
