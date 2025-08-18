@@ -1,0 +1,52 @@
+# Neural Collaborative Filtering - Baseline Configuration
+# A6000 GPU Optimized Training
+
+model:
+  type: "neural_cf"
+  mf_dim: 64
+  mlp_dims: [128, 64, 32]
+  dropout_rate: 0.2
+
+training:
+  batch_size: 2048          # Optimized for A6000 48GB VRAM
+  learning_rate: 0.001
+  epochs: 100
+  early_stopping:
+    patience: 15
+    min_delta: 0.001
+  
+optimizer:
+  type: "adam"
+  weight_decay: 1e-5
+  
+scheduler:
+  type: "reduce_on_plateau"
+  factor: 0.5
+  patience: 10
+  min_lr: 1e-6
+
+data:
+  dataset: "movielens-25m"
+  train_ratio: 0.8
+  val_ratio: 0.1
+  test_ratio: 0.1
+  min_interactions: 20      # Filter users/items with < 20 interactions
+  
+evaluation:
+  metrics: ["rmse", "mae", "hr@10", "ndcg@10", "mrr@10"]
+  protocol: "leave_one_out"
+  
+gpu:
+  device: "cuda"
+  mixed_precision: true     # A6000 optimization
+  compile: true             # PyTorch 2.0 optimization
+  
+logging:
+  log_level: "INFO"
+  save_model: true
+  checkpoint_freq: 10       # Save every 10 epochs
+  
+paths:
+  data_dir: "data/processed"
+  model_dir: "results/ncf_baseline"
+  logs_dir: "logs/ncf_baseline"

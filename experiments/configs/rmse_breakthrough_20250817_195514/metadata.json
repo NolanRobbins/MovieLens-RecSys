@@ -1,7 +1,0 @@
-{
-  "experiment_id": "rmse_breakthrough_20250817_195514",
-  "created_at": "2025-08-17T19:55:14.118829",
-  "template": "hybrid_vae_optimized",
-  "description": "RMSE breakthrough experiment targeting < 0.55",
-  "status": "planned"
-}

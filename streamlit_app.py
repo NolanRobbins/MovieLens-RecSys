@@ -1,6 +1,6 @@
 """
-MovieLens RecSys Production Demo - Main Streamlit Application
-Multi-page interface showcasing production ML engineering capabilities
+MovieLens RecSys: SS4Rec vs Neural CF Demo
+Streamlit application for comparing 2025 SOTA research results
 """
 
 import streamlit as st
@@ -15,13 +15,13 @@ sys.path.append("src")
 
 # Page configuration
 st.set_page_config(
-    page_title="MovieLens Production RecSys",
+    page_title="SS4Rec vs Neural CF Demo",
     page_icon="🎬",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for the main page
+# Custom CSS
 st.markdown("""
 <style>
     .main-header {
@@ -32,15 +32,14 @@ st.markdown("""
         text-align: center;
         margin-bottom: 2rem;
     }
-    .feature-card {
+    .model-card {
         background-color: #f8f9fa;
         padding: 1.5rem;
         border-radius: 10px;
         border-left: 4px solid #667eea;
         margin: 1rem 0;
-        height: 200px;
     }
-    .metric-highlight {
+    .sota-highlight {
         background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
         padding: 1rem;
         border-radius: 8px;
@@ -48,212 +47,168 @@ st.markdown("""
         text-align: center;
         margin: 0.5rem 0;
     }
-    .architecture-box {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 8px;
-        border: 1px solid #e1e5e9;
-        margin: 0.5rem 0;
-        font-family: monospace;
+    .baseline-card {
+        border-left: 4px solid #ffa726;
     }
-    .sidebar .sidebar-content {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    .ss4rec-card {
+        border-left: 4px solid #42a5f5;
     }
 </style>
 """, unsafe_allow_html=True)
 
 def main():
-    # Header
+    # Main header
     st.markdown("""
     <div class="main-header">
-        <h1>🎬 MovieLens Production RecSys</h1>
-        <h3>End-to-End ML Engineering Pipeline Demo</h3>
-        <p>Production-grade recommendation system showcasing modern MLOps practices</p>
+        <h1>🎬 MovieLens RecSys: SS4Rec Implementation</h1>
+        <p>2025 SOTA Sequential Recommendation vs Neural Collaborative Filtering</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Navigation guide
-    st.sidebar.markdown("## 📋 Navigation Guide")
-    st.sidebar.markdown("""
-    **🎬 Recommendations** - Netflix-style user interface  
-    **📊 ML Dashboard** - Engineering metrics and A/B tests  
-    **🔬 Experiments** - Model comparison and business impact  
-    **⚙️ Data Quality** - Production monitoring and alerts  
-    """)
+    # Research overview
+    st.markdown("## 🔬 Research Focus")
     
-    # Current status
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("## 🔴 System Status")
-    
-    status_data = {
-        "API Status": "🟢 Healthy",
-        "Model Version": "v2.1.0",
-        "Data Freshness": "🟢 <1 hour",
-        "Cache Hit Rate": "🟢 94%",
-        "Quality Score": "🟡 0.87"
-    }
-    
-    for key, value in status_data.items():
-        st.sidebar.markdown(f"**{key}**: {value}")
-    
-    # Main content
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns(2)
     
     with col1:
-        st.header("🚀 Production Features")
-        
-        features = [
-            {
-                "title": "🧠 Hybrid VAE Architecture", 
-                "description": "Advanced collaborative filtering with deep learning. 150D embeddings → 64D latent space with β-VAE regularization.",
-                "metric": "RMSE: 1.21 | Precision@10: 0.35"
-            },
-            {
-                "title": "⚡ Real-time Inference", 
-                "description": "Sub-50ms recommendation generation with intelligent caching and business logic integration.",
-                "metric": "P95 Latency: <45ms | Throughput: 1K+ RPS"
-            },
-            {
-                "title": "📊 Business Intelligence", 
-                "description": "Revenue attribution modeling with $2.3M projected annual impact from recommendation improvements.",
-                "metric": "CTR: +34% | Session Duration: +20%"
-            },
-            {
-                "title": "🔄 Continuous Learning", 
-                "description": "Automated drift detection and retraining triggers based on business metrics degradation.",
-                "metric": "Uptime: 99.9% | Auto-retraining: Enabled"
-            }
-        ]
-        
-        for feature in features:
-            st.markdown(f"""
-            <div class="feature-card">
-                <h4>{feature['title']}</h4>
-                <p>{feature['description']}</p>
-                <div class="metric-highlight">{feature['metric']}</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    with col2:
-        st.header("📈 Live Metrics")
-        
-        # Mock live metrics
-        current_time = datetime.now()
-        
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.metric("Active Users", "12,847", delta="324")
-            st.metric("Recommendations/min", "8,924", delta="156")
-        
-        with col_b:
-            st.metric("Model Accuracy", "94.2%", delta="0.8%")
-            st.metric("Cache Hit Rate", "94%", delta="2%")
-        
-        st.header("🏗️ Architecture")
         st.markdown("""
-        <div class="architecture-box">
-        GitHub Actions (CI/CD)
-            ↓
-        Feature Store (SQLite + Cache)  
-            ↓
-        Multi-Model Experiments
-            ↓
-        Streamlit Cloud (Production)
-            ↓
-        Real-time Monitoring
+        <div class="model-card baseline-card">
+            <h3>📊 Neural CF (Baseline)</h3>
+            <p><strong>Paper:</strong> Neural Collaborative Filtering (WWW 2017)</p>
+            <p><strong>Architecture:</strong> MF + MLP paths</p>
+            <p><strong>Expected RMSE:</strong> ~0.85-0.90</p>
+            <p><strong>Purpose:</strong> Solid baseline for comparison</p>
         </div>
         """, unsafe_allow_html=True)
-        
-        st.header("🎯 Quick Actions")
-        
-        if st.button("🎬 Try Recommendations", type="primary"):
-            st.switch_page("pages/1_🎬_Recommendations.py")
-        
-        if st.button("📊 View ML Dashboard"):
-            st.switch_page("pages/2_📊_ML_Dashboard.py")
-        
-        if st.button("⚙️ Monitor Data Quality"):
-            st.switch_page("pages/4_⚙️_Data_Quality_Monitor.py")
     
-    # Performance showcase
-    st.header("💡 Production Engineering Highlights")
+    with col2:
+        st.markdown("""
+        <div class="model-card ss4rec-card">
+            <h3>🚀 SS4Rec (SOTA 2025)</h3>
+            <p><strong>Paper:</strong> Continuous-Time Sequential Recommendation (Feb 2025)</p>
+            <p><strong>Architecture:</strong> State Space Models + Temporal</p>
+            <p><strong>Expected RMSE:</strong> ~0.60-0.70</p>
+            <p><strong>Innovation:</strong> Time-aware + Relation-aware SSM</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Performance comparison
+    st.markdown("## 🎯 Expected Performance")
+    
+    # Create comparison metrics
+    models = ["Previous VAE", "Neural CF", "SS4Rec"]
+    val_rmse = [1.25, 0.875, 0.65]
+    improvements = [0, 30, 48]
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.subheader("🔧 MLOps Excellence")
+        st.metric(
+            label="Previous VAE",
+            value="1.25 RMSE",
+            delta=None,
+            help="Previous overfitted result"
+        )
+    
+    with col2:
+        st.metric(
+            label="Neural CF (Baseline)",
+            value="0.88 RMSE",
+            delta="-30%",
+            delta_color="normal",
+            help="Expected baseline performance"
+        )
+    
+    with col3:
+        st.metric(
+            label="SS4Rec (SOTA)",
+            value="0.65 RMSE",
+            delta="-48%",
+            delta_color="normal",
+            help="Target SOTA performance"
+        )
+    
+    # Key features
+    st.markdown("## ✨ SS4Rec Key Innovations")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
         st.markdown("""
-        - **Zero-downtime deployment** with GitHub Actions
-        - **Automated A/B testing** with statistical validation  
-        - **Feature store** with <10ms lookup times
-        - **Intelligent caching** reducing compute by 60%
+        **⏰ Time-Aware SSM**
+        - Handles irregular time intervals
+        - Models temporal user preference decay
+        - Utilizes MovieLens timestamps
         """)
     
     with col2:
-        st.subheader("📊 Business Impact")
         st.markdown("""
-        - **$2.3M projected** annual revenue impact
-        - **20% increase** in session duration
-        - **67% catalog coverage** vs 23% baseline
-        - **34% CTR** on recommendations
+        **🔗 Relation-Aware SSM**
+        - Item-item contextual dependencies
+        - Sequential pattern modeling
+        - Better than attention mechanisms
         """)
     
     with col3:
-        st.subheader("🚨 Production Monitoring") 
         st.markdown("""
-        - **Real-time drift detection** with KS tests
-        - **Automated retraining triggers** on performance drop
-        - **99.9% uptime** with comprehensive alerting
-        - **Sub-50ms P95 latency** at production scale
+        **📈 Continuous-Time Modeling**
+        - Real user interest evolution
+        - Better than discrete transformers
+        - Proven on dense datasets
         """)
     
-    # Technology stack
-    st.header("🛠️ Technology Stack")
+    # Dataset information
+    st.markdown("## 📊 MovieLens Dataset")
     
-    tech_stack = {
-        "ML Framework": "PyTorch (Hybrid VAE)",
-        "Feature Store": "SQLite + diskcache", 
-        "Caching": "Multi-level caching strategy",
-        "Monitoring": "Statistical drift detection",
-        "CI/CD": "GitHub Actions + Streamlit Cloud",
-        "Business Logic": "Real-time filtering & ranking",
-        "Data Pipeline": "Temporal splitting + streaming simulation",
-        "Evaluation": "mAP@10, NDCG@10, business metrics"
-    }
+    # Mock dataset stats
+    st.markdown("""
+    - **Size**: 25M ratings, 162K movies, 280K users
+    - **Temporal**: Rich timestamp data (currently underutilized)
+    - **Sparsity**: High sparsity typical of collaborative filtering
+    - **Characteristics**: Dense dataset optimal for SS4Rec
+    """)
     
+    # Training status
+    st.markdown("## 🚀 Training Status")
+    
+    # Create training status (placeholder)
     col1, col2 = st.columns(2)
-    cols = [col1, col2]
     
-    for i, (key, value) in enumerate(tech_stack.items()):
-        with cols[i % 2]:
-            st.markdown(f"**{key}**: {value}")
+    with col1:
+        st.markdown("### Neural CF Status")
+        st.info("📋 Ready for training on A6000 GPU")
+        st.markdown("""
+        - Configuration: `configs/ncf_baseline.yaml`
+        - Training script: `training/train_ncf.py`
+        - Expected time: ~2-3 hours
+        """)
+    
+    with col2:
+        st.markdown("### SS4Rec Status")
+        st.warning("🔧 Implementation in progress")
+        st.markdown("""
+        - Configuration: `configs/ss4rec.yaml`
+        - Training script: `training/train_ss4rec.py`
+        - Expected time: ~4-5 hours
+        """)
+    
+    # Research links
+    st.markdown("## 📚 Research References")
+    
+    st.markdown("""
+    1. **SS4Rec Paper**: [Continuous-Time Sequential Recommendation with State Space Models](https://arxiv.org/abs/2502.08132)
+    2. **SS4Rec GitHub**: [Official Implementation](https://github.com/XiaoWei-i/SS4Rec)
+    3. **Neural CF Paper**: [Neural Collaborative Filtering (WWW 2017)](https://arxiv.org/abs/1708.05031)
+    4. **MovieLens Dataset**: [GroupLens Research](https://grouplens.org/datasets/movielens/)
+    """)
     
     # Footer
     st.markdown("---")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("### 📖 Documentation")
-        st.markdown("[GitHub Repository](https://github.com/your-username/MovieLens-RecSys)")
-        st.markdown("[Medium Article](https://medium.com/@your-username)")
-    
-    with col2:
-        st.markdown("### 🔗 Links")
-        st.markdown("[Live Demo](https://your-app.streamlit.app)")
-        st.markdown("[API Documentation](https://your-api-docs.com)")
-    
-    with col3:
-        st.markdown("### 📊 Metrics")
-        st.markdown(f"**Last Updated**: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        st.markdown("**Status**: 🟢 All Systems Operational")
-    
     st.markdown("""
-    ---
-    <div style='text-align: center; color: #666; font-size: 0.9em;'>
-        <strong>MovieLens Production RecSys</strong> | 
-        Built with ❤️ using modern ML engineering practices | 
-        Showcasing end-to-end production ML pipeline
+    <div style="text-align: center; color: #666;">
+        🎯 <strong>Goal:</strong> Demonstrate SS4Rec's superiority over traditional collaborative filtering<br>
+        📈 <strong>Target:</strong> Validation RMSE < 0.70 (vs current ~1.25)<br>
+        🔬 <strong>Focus:</strong> Real generalization performance using 2025 SOTA research
     </div>
     """, unsafe_allow_html=True)
 
