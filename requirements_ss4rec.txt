@@ -1,14 +1,14 @@
 # SS4Rec Dependencies
-# Core ML framework dependencies
+# Core ML framework dependencies (install torch first to resolve build dependencies)
 torch>=2.0.0
 numpy>=1.21.0
 pandas>=1.3.0
 scikit-learn>=1.0.0
 
-# State Space Model dependencies
+# State Space Model dependencies (mamba-ssm requires torch to be available during build)
+causal-conv1d>=1.2.0
 mamba-ssm==2.2.2
 s5-pytorch==0.2.1
-causal-conv1d>=1.2.0
 
 # RecBole framework (optional - for official implementation compatibility)
 recbole==1.2.0
