@@ -93,11 +93,19 @@ class S5Layer(nn.Module):
         
         # Adjust dt based on actual time intervals if provided
         if time_intervals is not None:
-            # Pad time_intervals to match sequence length
-            time_intervals_padded = torch.cat([
-                time_intervals, 
-                time_intervals[:, -1:] 
-            ], dim=1)  # [batch_size, seq_len]
+            # Ensure time_intervals matches sequence length
+            batch_size, current_len = time_intervals.shape
+            expected_len = dt.shape[1]  # Get sequence length from dt tensor
+            
+            if current_len < expected_len:
+                # Pad with the last time interval value
+                padding = time_intervals[:, -1:].expand(batch_size, expected_len - current_len)
+                time_intervals_padded = torch.cat([time_intervals, padding], dim=1)
+            elif current_len > expected_len:
+                # Truncate to match expected length
+                time_intervals_padded = time_intervals[:, :expected_len]
+            else:
+                time_intervals_padded = time_intervals
             
             dt = dt.squeeze(-1) * time_intervals_padded.unsqueeze(-1)
         
