@@ -216,6 +216,26 @@ if [ "$WANDB_ENABLED" = true ]; then
     fi
 fi
 
+# Discord webhook setup
+if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+    echo ""
+    echo "📱 Discord Notifications Setup"
+    echo "================================"
+    echo "Please enter your Discord webhook URL for training notifications"
+    echo "(Create one in your Discord server: Server Settings → Integrations → Webhooks)"
+    echo "Or press Enter to skip Discord notifications:"
+    read -p "Discord Webhook URL: " user_discord_webhook
+    
+    if [ -z "$user_discord_webhook" ]; then
+        log "⚠️  No Discord webhook provided, notifications disabled"
+    else
+        export DISCORD_WEBHOOK_URL="$user_discord_webhook"
+        log "📱 Discord webhook set, notifications enabled"
+    fi
+else
+    log "📱 Discord webhook found in environment, notifications enabled"
+fi
+
 # Determine config file
 if [ -z "$CONFIG_FILE" ]; then
     if [ "$MODEL_TYPE" = "ncf" ]; then
