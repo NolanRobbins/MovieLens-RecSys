@@ -335,6 +335,7 @@ def main():
     )
     
     # Initialize W&B
+    wandb.login()  # Authenticate with wandb
     wandb.init(
         project=args.wandb_project,
         name=f"ss4rec_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
@@ -507,7 +508,7 @@ def main():
             'test_loss': test_loss,
             'best_val_rmse': best_val_rmse,
             'best_epoch': best_epoch,
-            'total_epochs': epoch,
+            'total_epochs': args.epochs,
             'config': config,
             'model_params': {
                 'total': total_params,
