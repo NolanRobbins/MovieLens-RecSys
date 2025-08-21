@@ -107,7 +107,7 @@ class S5Layer(nn.Module):
             else:
                 time_intervals_padded = time_intervals
             
-            dt = dt.squeeze(-1) * time_intervals_padded.unsqueeze(-1)
+            dt = dt.view(batch_size, expected_len) * time_intervals_padded
         
         # Discretize state space matrices
         A = -torch.exp(self.A_log)  # [d_state]
