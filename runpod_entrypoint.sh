@@ -166,7 +166,7 @@ if [ "$MODEL_TYPE" = "ss4rec" ] && [ -f "requirements_ss4rec.txt" ]; then
     
     # Install monitoring and dev tools
     log "📦 Installing monitoring and development tools..."
-    uv pip install "wandb>=0.15.0" "tensorboard>=2.10.0" "tqdm>=4.64.0" "pyyaml>=6.0" || error_exit "Failed to install monitoring tools"
+    uv pip install "wandb>=0.15.0" "tensorboard>=2.10.0" "tqdm>=4.64.0" "pyyaml>=6.0" "diskcache>=5.4.0" || error_exit "Failed to install monitoring tools"
     uv pip install "matplotlib>=3.5.0" "seaborn>=0.11.0" "streamlit>=1.25.0" "plotly>=5.10.0" || error_exit "Failed to install visualization tools"
     uv pip install "fastapi>=0.95.0" "uvicorn>=0.20.0" || error_exit "Failed to install API tools"
     uv pip install "pytest>=7.0.0" "black>=22.0.0" "isort>=5.10.0" "mypy>=0.900" "ruff>=0.0.200" || error_exit "Failed to install dev tools"
