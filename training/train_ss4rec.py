@@ -349,7 +349,8 @@ def main():
         
         train_data = pd.read_csv(data_dir / 'train_data.csv')
         val_data = pd.read_csv(data_dir / 'val_data.csv')
-        test_data = pd.read_csv(data_dir / 'test_data.csv')
+        # Test data should not be used during training - create empty dataframe
+        test_data = pd.DataFrame()
         
         logging.info(f"Train: {len(train_data)}, Val: {len(val_data)}, Test: {len(test_data)}")
         
