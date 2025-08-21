@@ -52,27 +52,57 @@ def test_minimal_ss4rec():
         
         print(f"   ✅ Batch created: {batch_size} samples, {seq_len} sequence length")
         
-        # Forward pass
+        # Forward pass - TEST BOTH EVAL AND TRAIN MODE
         print("\n4️⃣ Running forward pass...")
+        
+        # Test eval mode first (like our original test)
         model.eval()
         with torch.no_grad():
-            predictions = model(
+            print("   Testing in eval mode...")
+            predictions_eval = model(
                 users=user_ids,
                 item_seq=item_seq, 
                 target_items=target_items,
                 timestamps=timestamps
             )
+            print(f"   Eval mode - Output range: [{predictions_eval.min():.3f}, {predictions_eval.max():.3f}]")
+            if torch.isnan(predictions_eval).any():
+                print("   ⚠️  NaN detected in EVAL mode")
+            else:
+                print("   ✅ No NaN in eval mode")
+        
+        # Test train mode (like real training)
+        model.train()
+        print("   Testing in train mode...")
+        predictions = model(
+            users=user_ids,
+            item_seq=item_seq, 
+            target_items=target_items,
+            timestamps=timestamps
+        )
         
         print(f"   ✅ Forward pass successful!")
         print(f"   📊 Output shape: {predictions.shape}")
         print(f"   📊 Output range: [{predictions.min():.3f}, {predictions.max():.3f}]")
         
-        # Test loss computation
-        print("\n5️⃣ Testing loss computation...")
-        targets = torch.randn(batch_size)  # Match prediction shape
+        # Test loss computation AND backward pass (like real training)
+        print("\n5️⃣ Testing loss computation and backward pass...")
+        targets = torch.rand(batch_size) * 4.5 + 0.5  # Realistic ratings 0.5-5.0
         criterion = nn.MSELoss()
         loss = criterion(predictions, targets)
         print(f"   ✅ Loss computed: {loss.item():.6f}")
+        
+        # Test backward pass (this is where nan often appears!)
+        print("   Testing backward pass...")
+        loss.backward()
+        print("   ✅ Backward pass successful!")
+        
+        # Check for NaN in gradients
+        nan_grads = any(torch.isnan(p.grad).any() for p in model.parameters() if p.grad is not None)
+        if nan_grads:
+            print("   ⚠️  NaN detected in gradients!")
+        else:
+            print("   ✅ No NaN in gradients")
         
         # Check for NaN values
         if torch.isnan(predictions).any():

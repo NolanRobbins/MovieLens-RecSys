@@ -222,9 +222,15 @@ class SS4Rec(nn.Module):
         """
         # Encode sequence
         seq_output = self.encode_sequence(item_seq, timestamps)
+        if torch.isnan(seq_output).any():
+            print(f"NaN in seq_output after encode_sequence!")
+            print(f"seq_output stats: min={seq_output.min()}, max={seq_output.max()}, nan_count={torch.isnan(seq_output).sum()}")
         
         # Get user embeddings
         user_emb = self.user_embedding(users)  # [batch_size, d_model]
+        if torch.isnan(user_emb).any():
+            print(f"NaN in user_emb!")
+            print(f"user_emb stats: min={user_emb.min()}, max={user_emb.max()}, nan_count={torch.isnan(user_emb).sum()}")
         
         if self.rating_prediction:
             # Rating prediction mode
@@ -242,7 +248,17 @@ class SS4Rec(nn.Module):
                 ], dim=-1)  # [batch_size, d_model * 2]
                 
                 # Predict rating
+                if torch.isnan(combined).any():
+                    print(f"NaN in combined tensor before rating_head!")
+                    print(f"combined stats: min={combined.min()}, max={combined.max()}, nan_count={torch.isnan(combined).sum()}")
+                    print(f"user_emb + seq_repr stats: min={(user_emb + seq_repr).min()}, max={(user_emb + seq_repr).max()}")
+                    print(f"target_emb stats: min={target_emb.min()}, max={target_emb.max()}")
+                
                 ratings = self.rating_head(combined).squeeze(-1)  # [batch_size]
+                
+                if torch.isnan(ratings).any():
+                    print(f"NaN in ratings after rating_head!")
+                    print(f"ratings stats: min={ratings.min()}, max={ratings.max()}, nan_count={torch.isnan(ratings).sum()}")
                 return ratings
             else:
                 # Return sequence representation for further processing
