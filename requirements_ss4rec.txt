@@ -5,6 +5,12 @@ numpy>=1.21.0
 pandas>=1.3.0
 scikit-learn>=1.0.0
 
+# Build dependencies (needed before mamba-ssm compilation)
+ninja>=1.10.0
+packaging>=21.0
+wheel>=0.37.0
+setuptools>=60.0
+
 # State Space Model dependencies (mamba-ssm requires torch to be available during build)
 causal-conv1d>=1.2.0
 mamba-ssm==2.2.2
