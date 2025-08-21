@@ -140,6 +140,11 @@ class MovieLensSequentialDataset(Dataset):
         item_seq[:seq_len] = seq_data['item_sequence']
         timestamp_seq[:seq_len] = seq_data['timestamp_sequence']
         
+        # Fix: Pad timestamps with the last timestamp instead of zeros to maintain temporal order
+        if seq_len < self.max_seq_len and seq_len > 0:
+            last_timestamp = seq_data['timestamp_sequence'][-1]
+            timestamp_seq[seq_len:] = last_timestamp
+        
         return {
             'user_id': torch.tensor(seq_data['user_id'], dtype=torch.long),
             'item_sequence': torch.tensor(item_seq, dtype=torch.long),
