@@ -147,6 +147,10 @@ class SS4Rec(nn.Module):
         time_intervals = time_diffs.float() / 86400.0  # Convert seconds to days
         print(f"DEBUG: time_intervals in days: [{time_intervals.min():.6f}, {time_intervals.max():.6f}]")
         
+        # Fix zero time differences (identical timestamps) with small positive value
+        time_intervals = torch.where(time_intervals == 0.0, 0.01, time_intervals)
+        print(f"DEBUG: after zero fix: [{time_intervals.min():.6f}, {time_intervals.max():.6f}]")
+        
         # Clip extreme values (0.01 days = ~14 minutes, 365 days = 1 year)
         time_intervals = torch.clamp(time_intervals, min=0.01, max=365.0)
         print(f"DEBUG: after clamp: [{time_intervals.min():.6f}, {time_intervals.max():.6f}]")
