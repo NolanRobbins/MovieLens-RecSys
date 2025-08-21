@@ -31,7 +31,7 @@ project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
 from models.sota_2025.ss4rec import SS4Rec, create_ss4rec_model
-from src.data.feature_pipeline import FeaturePipeline
+from src.data.feature_pipeline import EnhancedFeaturePipeline as FeaturePipeline
 from src.evaluation.evaluate_model import ModelEvaluator
 
 
@@ -44,8 +44,8 @@ class MovieLensSequentialDataset(Dataset):
     
     def __init__(self, 
                  data: pd.DataFrame,
-                 user_col: str = 'userId',
-                 item_col: str = 'movieId', 
+                 user_col: str = 'user_idx',
+                 item_col: str = 'movie_idx', 
                  rating_col: str = 'rating',
                  timestamp_col: str = 'timestamp',
                  max_seq_len: int = 200,
@@ -354,8 +354,9 @@ def main():
         logging.info(f"Train: {len(train_data)}, Val: {len(val_data)}, Test: {len(test_data)}")
         
         # Get data statistics
-        n_users = max(train_data['userId'].max(), val_data['userId'].max(), test_data['userId'].max()) + 1
-        n_items = max(train_data['movieId'].max(), val_data['movieId'].max(), test_data['movieId'].max()) + 1
+        # Use ONLY train and val data for model dimensions (test data is unseen!)
+        n_users = max(train_data['user_idx'].max(), val_data['user_idx'].max()) + 1
+        n_items = max(train_data['movie_idx'].max(), val_data['movie_idx'].max()) + 1
         
         logging.info(f"Users: {n_users}, Items: {n_items}")
         
