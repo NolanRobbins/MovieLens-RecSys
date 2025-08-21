@@ -218,11 +218,19 @@ def train_epoch(model: SS4Rec,
         # Compute loss
         loss = criterion(predictions, target_ratings)
         
+        # Debug nan loss
+        if torch.isnan(loss):
+            print(f"NaN loss detected!")
+            print(f"Predictions stats: min={predictions.min()}, max={predictions.max()}, nan_count={torch.isnan(predictions).sum()}")
+            print(f"Target ratings stats: min={target_ratings.min()}, max={target_ratings.max()}")
+            print(f"Model has nan params: {any(torch.isnan(p).any() for p in model.parameters())}")
+            raise ValueError("NaN loss - stopping training")
+        
         # Backward pass
         loss.backward()
         
-        # Gradient clipping for stability
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        # Gradient clipping for stability (more aggressive)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
         
         # Update parameters
         optimizer.step()

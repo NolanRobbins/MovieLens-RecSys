@@ -59,18 +59,24 @@ class S5Layer(nn.Module):
     
     def _init_parameters(self):
         """Initialize parameters following S5 paper"""
-        # Initialize A matrix (diagonal, stable)
+        # Initialize A matrix (diagonal, stable) - ensure all values are negative
         with torch.no_grad():
-            A = torch.diag(torch.linspace(-1, -0.1, self.d_state))
-            self.A_log.copy_(torch.log(-A.diag()))
+            # Create stable diagonal matrix with negative eigenvalues
+            A_diag = torch.linspace(-1.0, -0.1, self.d_state)
+            # Ensure all values are strictly negative to avoid log(0) or log(positive)
+            A_diag = torch.clamp(A_diag, max=-1e-6)
+            self.A_log.copy_(torch.log(-A_diag))
         
-        # Initialize B and C
-        nn.init.xavier_uniform_(self.B)
-        nn.init.xavier_uniform_(self.C)
+        # Initialize B and C with smaller variance to prevent exploding gradients
+        nn.init.xavier_uniform_(self.B, gain=0.1)
+        nn.init.xavier_uniform_(self.C, gain=0.1)
         
-        # Initialize dt projection
-        self.dt_proj.weight.data.uniform_(-0.1, 0.1)
-        self.dt_proj.bias.data.uniform_(-0.1, 0.1)
+        # Initialize D to zero (skip connection)
+        nn.init.zeros_(self.D)
+        
+        # Initialize dt projection with smaller range
+        self.dt_proj.weight.data.uniform_(-0.01, 0.01)
+        self.dt_proj.bias.data.uniform_(-0.01, 0.01)
     
     def forward(self, 
                 x: torch.Tensor,
