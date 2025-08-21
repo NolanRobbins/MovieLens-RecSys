@@ -133,9 +133,13 @@ class S5Layer(nn.Module):
         for t in range(seq_len):
             # Update state: x_{t+1} = A * x_t + B * u_t
             u_t = x[:, t, :]  # [batch_size, d_model]
-            states = dA[:, t, :] * states + torch.einsum('sd,bd->bs', dB[:, t, :, :].squeeze(0), u_t)
             
-            # Compute output: y_t = C * x_t + D * u_t
+            # Fix: squeeze dA to get proper 2D tensor [batch_size, d_state]
+            dA_t = dA[:, t, :].squeeze(1)  # Remove middle dimension
+            state_update = torch.einsum('bsd,bd->bs', dB[:, t, :, :], u_t)
+            states = dA_t * states + state_update
+            
+            # Compute output: y_t = C * x_t + D * u_t  
             y_t = torch.einsum('bs,ds->bd', states, self.C) + self.D * u_t
             outputs.append(y_t)
         
