@@ -32,21 +32,21 @@ ENV/
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
 
-# Dataset files (too large for git - raw data only)
-data/raw/ml-32m/
-ml-32m.zip
+# Dataset files (all data files downloaded via gdown)
+data/raw/
+data/processed/*.csv
+data/processed/*.pkl
 *.zip
 
-# Large model files (but allow smaller processed data)
+# Large model files
 *.pt
 *.pth
 data/models/*.pt
 data/models/*.pth
 
-# Allow processed data files needed for Streamlit Cloud
-!data/processed/*.csv
-!data/processed/*.pkl
+# Keep metadata and config files in processed
 !data/processed/*.json
+!data/processed/metadata.json
 
 # IDE
 .vscode/

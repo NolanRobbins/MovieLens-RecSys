@@ -1,17 +1,2 @@
-# Data files (CSV files excluded from LFS to allow direct downloads)
-# data/processed/*.csv filter=lfs diff=lfs merge=lfs -text
-# data/raw/*.csv filter=lfs diff=lfs merge=lfs -text
-
-# Model files
-*.pt filter=lfs diff=lfs merge=lfs -text
-*.pth filter=lfs diff=lfs merge=lfs -text
-*.pkl filter=lfs diff=lfs merge=lfs -text
-*.joblib filter=lfs diff=lfs merge=lfs -text
-
-# Large data archives
-*.zip filter=lfs diff=lfs merge=lfs -text
-*.tar.gz filter=lfs diff=lfs merge=lfs -text
-
-# Database files
-*.db filter=lfs diff=lfs merge=lfs -text
-*.sqlite filter=lfs diff=lfs merge=lfs -text
+# Git LFS removed - using gdown for data downloads instead
+# All large files will be downloaded via gdown or generated locally
