@@ -147,7 +147,7 @@ if [ "$MODEL_TYPE" = "ss4rec" ] && [ -f "requirements_ss4rec.txt" ]; then
     uv pip install "causal-conv1d>=1.2.0" || error_exit "Failed to install causal-conv1d"
     
     log "📦 Installing mamba-ssm (with torch available)..."
-    uv pip install mamba-ssm==2.2.2 || error_exit "Failed to install mamba-ssm"
+    uv pip install mamba-ssm==2.2.2 --no-build-isolation || error_exit "Failed to install mamba-ssm"
     
     log "📦 Installing remaining SS4Rec dependencies..."
     uv pip install s5-pytorch==0.2.1 recbole==1.2.0 || error_exit "Failed to install s5-pytorch and recbole"
