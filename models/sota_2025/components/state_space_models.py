@@ -96,6 +96,7 @@ class S5Layer(nn.Module):
         # Compute time-dependent discretization
         dt = self.dt_proj(x)  # [batch_size, seq_len, 1]
         dt = torch.sigmoid(dt) * (self.dt_max - self.dt_min) + self.dt_min
+        dt = torch.clamp(dt, min=1e-6, max=1.0)  # Prevent extreme dt values
         
         # Adjust dt based on actual time intervals if provided
         if time_intervals is not None:
@@ -118,7 +119,11 @@ class S5Layer(nn.Module):
         
         # Discretize state space matrices
         A = -torch.exp(self.A_log)  # [d_state]
-        dA = torch.exp(dt.unsqueeze(-1) * A.unsqueeze(0).unsqueeze(0))  # [batch_size, seq_len, d_state]
+        
+        # Clamp dt*A to prevent numerical explosion in exp()
+        dt_A = dt.unsqueeze(-1) * A.unsqueeze(0).unsqueeze(0)
+        dt_A = torch.clamp(dt_A, min=-10.0, max=10.0)  # Prevent exp() overflow
+        dA = torch.exp(dt_A)  # [batch_size, seq_len, d_state]
         dB = (dt.unsqueeze(-1) * self.B.unsqueeze(0).unsqueeze(0))  # [batch_size, seq_len, d_state, d_model]
         
         # State space computation
@@ -128,7 +133,7 @@ class S5Layer(nn.Module):
         for t in range(seq_len):
             # Update state: x_{t+1} = A * x_t + B * u_t
             u_t = x[:, t, :]  # [batch_size, d_model]
-            states = dA[:, t, :].squeeze(1) * states + torch.einsum('bsd,bd->bs', dB[:, t, :, :], u_t)
+            states = dA[:, t, :] * states + torch.einsum('sd,bd->bs', dB[:, t, :, :].squeeze(0), u_t)
             
             # Compute output: y_t = C * x_t + D * u_t
             y_t = torch.einsum('bs,ds->bd', states, self.C) + self.D * u_t
