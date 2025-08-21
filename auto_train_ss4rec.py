@@ -104,8 +104,15 @@ def main():
         print(f"❌ Training script not found: {training_script}")
         sys.exit(1)
     
-    # Build command arguments
-    cmd_args = [sys.executable, training_script, '--model', args.model]
+    # Build command arguments - use virtual environment python
+    venv_python = os.path.join('.venv', 'bin', 'python')
+    if not os.path.exists(venv_python):
+        venv_python = sys.executable  # fallback to system python
+        print(f"⚠️  Virtual environment python not found, using: {venv_python}")
+    else:
+        print(f"🐍 Using virtual environment python: {venv_python}")
+    
+    cmd_args = [venv_python, training_script, '--model', args.model]
     if args.config:
         cmd_args.extend(['--config', args.config])
     if args.no_wandb:
