@@ -150,8 +150,16 @@ if [ "$MODEL_TYPE" = "ss4rec" ] && [ -f "requirements_ss4rec.txt" ]; then
     # Install additional build dependencies for mamba-ssm
     uv pip install ninja packaging wheel setuptools
     
-    # Try with regular pip instead of uv for better CUDA compatibility
-    pip install mamba-ssm==2.2.2 --no-build-isolation || error_exit "Failed to install mamba-ssm"
+    # Install git for cloning repository
+    apt-get update -qq && apt-get install -y git
+    
+    # Try installing from GitHub repository with submodules
+    log "🔧 Installing mamba-ssm from GitHub repository..."
+    pip install git+https://github.com/state-spaces/mamba.git@v2.2.2 --no-build-isolation || \
+    log "⚠️  GitHub installation failed, trying PyPI with fallback..." && \
+    pip install mamba-ssm==2.2.2 --no-build-isolation || \
+    pip install mamba-ssm==2.0.2 --no-build-isolation || \
+    error_exit "Failed to install any version of mamba-ssm"
     
     log "📦 Installing remaining SS4Rec dependencies..."
     uv pip install s5-pytorch==0.2.1 recbole==1.2.0 || error_exit "Failed to install s5-pytorch and recbole"
