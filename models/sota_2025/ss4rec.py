@@ -137,17 +137,27 @@ class SS4Rec(nn.Module):
             batch_size, seq_len = timestamps.shape if timestamps is not None else (1, self.max_seq_len)
             return torch.ones(batch_size, seq_len - 1, device=self.item_embedding.weight.device)
         
-        # Compute time differences
+        # Compute time differences (in seconds)
         time_diffs = timestamps[:, 1:] - timestamps[:, :-1]
         
-        # Normalize time intervals (convert to days or hours as needed)
-        time_intervals = time_diffs.float()
+        # Debug: check for extreme values
+        print(f"DEBUG: time_diffs range: [{time_diffs.min():.2f}, {time_diffs.max():.2f}]")
         
-        # Clip extreme values
-        time_intervals = torch.clamp(time_intervals, min=0.01, max=365.0)  # 0.01 to 365 days
+        # Convert to days first to avoid huge numbers
+        time_intervals = time_diffs.float() / 86400.0  # Convert seconds to days
+        print(f"DEBUG: time_intervals in days: [{time_intervals.min():.6f}, {time_intervals.max():.6f}]")
         
-        # Normalize to [0, 1] range for stability
+        # Clip extreme values (0.01 days = ~14 minutes, 365 days = 1 year)
+        time_intervals = torch.clamp(time_intervals, min=0.01, max=365.0)
+        print(f"DEBUG: after clamp: [{time_intervals.min():.6f}, {time_intervals.max():.6f}]")
+        
+        # Normalize to [0, 1] range for numerical stability
         time_intervals = time_intervals / 365.0
+        print(f"DEBUG: after normalize: [{time_intervals.min():.6f}, {time_intervals.max():.6f}]")
+        
+        # Additional safety: clamp to prevent any remaining extreme values
+        time_intervals = torch.clamp(time_intervals, min=1e-6, max=1.0)
+        print(f"DEBUG: final time_intervals: [{time_intervals.min():.6f}, {time_intervals.max():.6f}]")
         
         return time_intervals
     

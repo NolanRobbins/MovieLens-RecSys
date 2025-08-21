@@ -24,11 +24,11 @@ def test_minimal_ss4rec():
         from models.sota_2025.ss4rec import SS4Rec
         print("   ✅ Import successful")
         
-        # Create model with small parameters
+        # Create model with REAL data dimensions
         print("\n2️⃣ Creating SS4Rec model...")
         model = SS4Rec(
-            n_users=1000,     # Small for testing
-            n_items=5000,     # Small for testing  
+            n_users=200948,   # Real user count
+            n_items=84430,    # Real item count  
             d_model=64,
             d_state=16,
             n_layers=2,       # Fewer layers for speed
@@ -43,10 +43,12 @@ def test_minimal_ss4rec():
         batch_size = 4
         seq_len = 50
         
-        user_ids = torch.randint(0, 1000, (batch_size,))
-        item_seq = torch.randint(0, 5000, (batch_size, seq_len))
-        timestamps = torch.randn(batch_size, seq_len)
-        target_items = torch.randint(0, 5000, (batch_size,))
+        user_ids = torch.randint(0, 200948, (batch_size,))       # Real user range
+        item_seq = torch.randint(0, 84430, (batch_size, seq_len))  # Real item range
+        # Use realistic timestamps (Unix timestamps from 2020-2025 range) - SORTED!
+        timestamps = torch.randint(1577836800, 1735689600, (batch_size, seq_len)).float()
+        timestamps = timestamps.sort(dim=1)[0]  # Sort timestamps within each sequence
+        target_items = torch.randint(0, 84430, (batch_size,))    # Real item range
         
         print(f"   ✅ Batch created: {batch_size} samples, {seq_len} sequence length")
         
