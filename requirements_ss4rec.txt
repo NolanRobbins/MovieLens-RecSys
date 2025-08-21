@@ -26,6 +26,7 @@ tensorboard>=2.10.0
 # Data processing
 tqdm>=4.64.0
 pyyaml>=6.0
+diskcache>=5.4.0
 
 # Evaluation and metrics
 matplotlib>=3.5.0
