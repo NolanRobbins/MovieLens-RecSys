@@ -138,13 +138,26 @@ ls -la requirements*.txt 2>/dev/null || log "   No requirements*.txt files found
 if [ "$MODEL_TYPE" = "ss4rec" ] && [ -f "requirements_ss4rec.txt" ]; then
     log "🧠 Installing SS4Rec requirements with uv..."
     
-    # First install torch to resolve mamba-ssm build dependency
-    log "🔧 Installing torch first to resolve mamba-ssm build dependency..."
-    uv pip install torch>=2.0.0 || error_exit "Failed to install torch"
+    # Install core dependencies first
+    log "🔧 Installing core ML dependencies..."
+    uv pip install torch>=2.0.0 numpy>=1.21.0 pandas>=1.3.0 scikit-learn>=1.0.0 || error_exit "Failed to install core dependencies"
     
-    # Now install remaining SS4Rec requirements
-    log "📦 Installing remaining SS4Rec requirements..."
-    uv pip install -r requirements_ss4rec.txt || error_exit "Failed to install SS4Rec requirements"
+    # Install state space dependencies individually
+    log "📦 Installing causal-conv1d..."
+    uv pip install "causal-conv1d>=1.2.0" || error_exit "Failed to install causal-conv1d"
+    
+    log "📦 Installing mamba-ssm (with torch available)..."
+    uv pip install mamba-ssm==2.2.2 || error_exit "Failed to install mamba-ssm"
+    
+    log "📦 Installing remaining SS4Rec dependencies..."
+    uv pip install s5-pytorch==0.2.1 recbole==1.2.0 || error_exit "Failed to install s5-pytorch and recbole"
+    
+    # Install monitoring and dev tools
+    log "📦 Installing monitoring and development tools..."
+    uv pip install "wandb>=0.15.0" "tensorboard>=2.10.0" "tqdm>=4.64.0" "pyyaml>=6.0" || error_exit "Failed to install monitoring tools"
+    uv pip install "matplotlib>=3.5.0" "seaborn>=0.11.0" "streamlit>=1.25.0" "plotly>=5.10.0" || error_exit "Failed to install visualization tools"
+    uv pip install "fastapi>=0.95.0" "uvicorn>=0.20.0" || error_exit "Failed to install API tools"
+    uv pip install "pytest>=7.0.0" "black>=22.0.0" "isort>=5.10.0" "mypy>=0.900" "ruff>=0.0.200" || error_exit "Failed to install dev tools"
 elif [ -f "requirements.txt" ]; then
     log "📦 Installing base requirements for $MODEL_TYPE with uv..."
     uv pip install -r requirements.txt || error_exit "Failed to install base requirements"
