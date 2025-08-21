@@ -65,4 +65,4 @@ wandb/
 # Large data files (but allow processed data)
 data/raw/*.csv
 data/raw/*.tsv
-data/raw/*.parquet
+data/raw/*.parquetdata/processed/val_data.csv

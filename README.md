@@ -158,3 +158,5 @@ Focus areas:
 ---
 
 **Research Goal**: Demonstrate SS4Rec's superiority over traditional collaborative filtering on MovieLens dataset using proper validation methodology.
+
+Note: We had to implement the ss4rec model from stratch, tensor and broadcast checking in all!

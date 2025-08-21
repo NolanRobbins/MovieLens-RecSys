@@ -125,7 +125,7 @@ class S5Layer(nn.Module):
             states = dA[:, t, :].squeeze(1) * states + torch.einsum('bsd,bd->bs', dB[:, t, :, :], u_t)
             
             # Compute output: y_t = C * x_t + D * u_t
-            y_t = torch.einsum('bs,sd->bd', states, self.C) + self.D * u_t
+            y_t = torch.einsum('bs,ds->bd', states, self.C) + self.D * u_t
             outputs.append(y_t)
         
         output = torch.stack(outputs, dim=1)  # [batch_size, seq_len, d_model]
