@@ -390,6 +390,31 @@ class MovieLensETL:
             logger.error(f"❌ ETL pipeline failed: {e}")
             return error_summary
 
+def load_processed_data(data_dir: str = "data/processed") -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict]:
+    """
+    Load preprocessed training data for model training
+    
+    Args:
+        data_dir: Directory containing processed data files
+        
+    Returns:
+        Tuple of (train_df, val_df, test_df, mappings)
+    """
+    data_path = Path(data_dir)
+    
+    # Load data splits
+    train_df = pd.read_csv(data_path / 'train_data.csv')
+    val_df = pd.read_csv(data_path / 'val_data.csv')
+    test_df = pd.read_csv(data_path / 'test_data.csv') if (data_path / 'test_data.csv').exists() else pd.DataFrame()
+    
+    # Load mappings
+    with open(data_path / 'data_mappings.pkl', 'rb') as f:
+        mappings = pickle.load(f)
+    
+    logger.info(f"Loaded processed data: {len(train_df):,} train, {len(val_df):,} val, {len(test_df):,} test samples")
+    
+    return train_df, val_df, test_df, mappings
+
 def main():
     """Run ETL pipeline from command line"""
     import argparse
