@@ -85,6 +85,8 @@ def main():
                        help='Custom config file')
     parser.add_argument('--no-wandb', action='store_true',
                        help='Disable W&B logging')
+    parser.add_argument('--debug', action='store_true',
+                       help='Enable comprehensive debug logging for NaN detection')
     
     args = parser.parse_args()
     
@@ -117,6 +119,8 @@ def main():
         cmd_args.extend(['--config', args.config])
     if args.no_wandb:
         cmd_args.append('--no-wandb')
+    if args.debug:
+        cmd_args.append('--debug')
     
     print(f"""
 🎬 MovieLens RecSys Auto-Trainer
@@ -124,6 +128,7 @@ def main():
 🚀 Project: {project_name}
 📝 Script: {training_script}
 🎯 Model: {args.model.upper()}
+🔍 Debug Mode: {'ENABLED - Comprehensive NaN detection logging' if args.debug else 'Disabled'}
 📅 Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -135,6 +140,7 @@ def main():
     system_info = get_system_info()
     start_message = f"""
 **🚀 Training Started - {args.model.upper()}**
+{'🔍 **DEBUG MODE ENABLED** - NaN detection active' if args.debug else ''}
 
 📊 **Model:** {args.model.upper()} ({'Baseline' if args.model == 'ncf' else 'SOTA 2025'})
 ⏰ **Started:** {datetime.now().strftime('%H:%M:%S UTC')}
