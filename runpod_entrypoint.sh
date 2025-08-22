@@ -34,6 +34,8 @@ CONFIG_FILE=""
 WANDB_ENABLED=true
 AUTO_SETUP=true
 
+DEBUG_LOGGING=false
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         --model)
@@ -52,6 +54,14 @@ while [[ $# -gt 0 ]]; do
             AUTO_SETUP=false
             shift
             ;;
+        --debug)
+            DEBUG_LOGGING=true
+            shift
+            ;;
+        --production)
+            DEBUG_LOGGING=false
+            shift
+            ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
@@ -59,6 +69,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --config FILE     Custom config file"
             echo "  --no-wandb        Disable W&B logging"
             echo "  --no-setup        Skip automatic setup"
+            echo "  --debug           Enable comprehensive debug logging for NaN detection"
+            echo "  --production      Disable debug logging for optimal performance"
             echo "  --help            Show this help"
             exit 0
             ;;
@@ -70,6 +82,7 @@ done
 
 log "🎯 Model: $MODEL_TYPE"
 log "📊 W&B Enabled: $WANDB_ENABLED"
+log "🔍 Debug Logging: $DEBUG_LOGGING"
 log "⚠️  Note: Test data excluded from training (as it should be!)"
 
 # Ensure we're in the project directory
@@ -316,20 +329,144 @@ else
     error_exit "Training data format is incompatible"
 fi
 
+# Training mode configuration
+if [ "$DEBUG_LOGGING" = true ]; then
+    log "🔍 ENABLING DEBUG MODE - Comprehensive NaN detection and logging"
+    log "⚠️  WARNING: Debug mode significantly reduces training performance"
+    log "⚠️  Use --production flag for optimal performance once debugging is complete"
+    
+    # Create comprehensive logging directory structure
+    mkdir -p logs/debug
+    
+    # Configure Python logging environment variables
+    export PYTHONPATH="/workspace:$PYTHONPATH"
+    export SS4REC_DEBUG_LOGGING=1
+    export SS4REC_LOG_LEVEL=DEBUG
+    export SS4REC_LOG_FILE="logs/debug/ss4rec_training_debug.log"
+    
+    # Enable PyTorch anomaly detection for gradient debugging
+    export TORCH_DETECT_ANOMALY=1
+    
+    # Create Python logging configuration
+    cat > debug_logging_config.py << 'EOF'
+import logging
+import sys
+from pathlib import Path
+
+def setup_comprehensive_debug_logging():
+    """Set up comprehensive debug logging for SS4Rec NaN detection"""
+    
+    # Ensure log directory exists
+    log_dir = Path("logs/debug")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Configure root logger with comprehensive settings
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s | %(levelname)-8s | %(name)-40s | %(message)s',
+        handlers=[
+            # File handler for debug logs
+            logging.FileHandler(log_dir / "ss4rec_training_debug.log", mode='w'),
+            # Console handler for important messages only
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    
+    # Set console handler to show only warnings and errors
+    console_handler = logging.getLogger().handlers[1]
+    console_handler.setLevel(logging.WARNING)
+    
+    # Configure specific loggers for maximum debug detail
+    loggers_to_debug = [
+        "models.sota_2025.ss4rec",
+        "models.sota_2025.components.state_space_models",
+        "training.train_ss4rec",
+        "auto_train_ss4rec"
+    ]
+    
+    for logger_name in loggers_to_debug:
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(logging.DEBUG)
+        # Prevent duplicate messages
+        logger.propagate = True
+    
+    # Log the setup completion
+    debug_logger = logging.getLogger("debug_setup")
+    debug_logger.info("🔧 Comprehensive debug logging enabled")
+    debug_logger.info(f"📁 Debug logs will be saved to: {log_dir / 'ss4rec_training_debug.log'}")
+    debug_logger.info("🚨 NaN detection: Enabled at every tensor operation")
+    debug_logger.info("🔍 Einsum logging: Enabled for all state space operations")
+    debug_logger.info("⚡ PyTorch anomaly detection: Enabled for gradient debugging")
+    
+    return True
+
+if __name__ == "__main__":
+    setup_comprehensive_debug_logging()
+EOF
+    
+    log "✅ Debug logging configuration created"
+    log "📁 Debug logs will be saved to: logs/debug/ss4rec_training_debug.log"
+    log "🚨 PyTorch anomaly detection enabled - training will be slower but catch NaN issues immediately"
+    log "🔍 All tensor operations in SS4Rec will be logged with full statistics"
+    log "🎯 RECOMMENDATION: Run 1-2 epochs in debug mode, then restart with --production for full training"
+else
+    log "🚀 PRODUCTION MODE ENABLED - Optimized for performance"
+    log "🔧 Debug logging disabled for maximum training speed"
+    log "⚡ PyTorch anomaly detection disabled"
+    log "📈 CUDA operations optimized for throughput"
+    
+    # Ensure debug environment variables are unset
+    unset SS4REC_DEBUG_LOGGING
+    unset SS4REC_LOG_LEVEL 
+    unset SS4REC_LOG_FILE
+    unset TORCH_DETECT_ANOMALY
+fi
+
 # GPU memory optimization
 log "🚀 Setting up GPU optimizations..."
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
-export CUDA_LAUNCH_BLOCKING=0  # For performance
 
-# Start training
+if [ "$DEBUG_LOGGING" = true ]; then
+    # Enable blocking for better error traces when debugging
+    export CUDA_LAUNCH_BLOCKING=1
+    log "⚠️  CUDA_LAUNCH_BLOCKING=1 enabled for precise error traces (slower performance)"
+    log "🐛 GPU operations will be synchronous for debugging"
+else
+    export CUDA_LAUNCH_BLOCKING=0
+    log "⚡ CUDA_LAUNCH_BLOCKING=0 for async GPU operations (optimal performance)"
+    log "🚀 GPU memory optimizations enabled for production training"
+fi
+
+# Training mode summary
+log "================================"
 log "🎬 Starting $MODEL_TYPE training..."
+if [ "$DEBUG_LOGGING" = true ]; then
+    log "🔍 MODE: DEBUG (NaN detection enabled)"
+    log "⚠️  Performance: Significantly slower"
+    log "🎯 Purpose: Model validation and debugging"
+    log "💡 Recommendation: Run 1-2 epochs, then restart with --production"
+else
+    log "🚀 MODE: PRODUCTION (Optimized performance)"
+    log "⚡ Performance: Maximum speed"
+    log "🎯 Purpose: Full model training"
+    log "📈 Expected: Optimal throughput and memory usage"
+fi
 log "================================"
 
 # Build training command - use auto_train for Discord notifications
-TRAIN_CMD="python auto_train_ss4rec.py --model $MODEL_TYPE --config $CONFIG_FILE"
+if [ "$DEBUG_LOGGING" = true ]; then
+    # Prepend debug logging setup to training command
+    TRAIN_CMD="python -c 'from debug_logging_config import setup_comprehensive_debug_logging; setup_comprehensive_debug_logging()' && python auto_train_ss4rec.py --model $MODEL_TYPE --config $CONFIG_FILE"
+else
+    TRAIN_CMD="python auto_train_ss4rec.py --model $MODEL_TYPE --config $CONFIG_FILE"
+fi
 
 if [ "$WANDB_ENABLED" = false ]; then
     TRAIN_CMD="$TRAIN_CMD --no-wandb"
+fi
+
+if [ "$DEBUG_LOGGING" = true ]; then
+    TRAIN_CMD="$TRAIN_CMD --debug"
 fi
 
 log "🚀 Executing: $TRAIN_CMD"
