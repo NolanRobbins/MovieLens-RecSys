@@ -367,15 +367,16 @@ class MambaLayer(nn.Module):
         self.x_proj = nn.Linear(self.d_inner, d_state * 2, bias=False)
         self.dt_proj = nn.Linear(self.d_inner, self.d_inner, bias=True)
         
-        # State space matrices - following SS4Rec selective SSM methodology
-        # A matrix: Use HiPPO initialization as per SS4Rec paper
-        # Initialize with stable negative diagonal values
+        # State space matrices - following Mamba selective SSM methodology with stability
+        # A matrix: Critical for stability - must produce negative values
+        # Initialize with negative log values to ensure exp(A_log) gives stable negative values
         A_diagonal = torch.logspace(
-            start=math.log10(0.001),
-            end=math.log10(1.0), 
+            start=math.log10(0.001),  # Small values
+            end=math.log10(0.1),      # Conservative max  
             steps=d_state
         )
-        self.A_log = nn.Parameter(-A_diagonal)  # Negative for stability
+        # Store as negative log to ensure stability: exp(-log(x)) = -x (negative)
+        self.A_log = nn.Parameter(torch.log(A_diagonal))  # Will be made negative in forward
         
         # D matrix: Skip connection following SS4Rec architecture
         self.D = nn.Parameter(torch.ones(self.d_inner) * 0.1)  # Smaller scale for stability
@@ -450,7 +451,12 @@ class MambaLayer(nn.Module):
         log_tensor_stats(self.A_log, "mamba_A_log", "Mamba_ssm_computation")
         log_tensor_stats(self.D, "mamba_D", "Mamba_ssm_computation")
         
-        y = self.selective_scan(x_conv, dt, self.A_log, B, C, self.D)
+        # Transform A_log to A matrix - critical for stability!
+        A = -torch.exp(self.A_log)  # Negative exponential for stability
+        A = check_numerical_stability(A, "mamba_A_matrix")
+        log_tensor_stats(A, "mamba_A_matrix", "Mamba_ssm_computation")
+        
+        y = self.selective_scan(x_conv, dt, A, B, C, self.D)
         y = check_numerical_stability(y, "mamba_selective_scan_output")
         log_tensor_stats(y, "mamba_selective_scan_output", "Mamba_ssm_computation")
         
@@ -517,8 +523,8 @@ class MambaLayer(nn.Module):
         delta_A_product = delta.unsqueeze(-1) * A.unsqueeze(0).unsqueeze(0)
         log_tensor_stats(delta_A_product, "delta_A_product", "Scan_discretization")
         
-        # Conservative clamping to prevent exp overflow - following SS4Rec stability requirements
-        delta_A_product = torch.clamp(delta_A_product, min=-5.0, max=5.0)
+        # Very conservative clamping to prevent exp overflow - critical for Mamba stability
+        delta_A_product = torch.clamp(delta_A_product, min=-3.0, max=0.0)  # Max at 0 since A should be negative
         
         deltaA = torch.exp(delta_A_product)  # [batch_size, seq_len, d_inner, d_state]
         deltaA = check_numerical_stability(deltaA, "scan_deltaA")
