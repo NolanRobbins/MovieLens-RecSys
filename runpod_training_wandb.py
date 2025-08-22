@@ -143,6 +143,10 @@ def main():
                 # SS4Rec script doesn't support --no-wandb, skip W&B setup in env
                 os.environ['WANDB_MODE'] = 'disabled'
             
+            if args.debug:
+                cmd.extend(['--debug'])
+                print("🔍 Debug mode enabled for SS4Rec training")
+            
             print(f"📋 Running: {' '.join(cmd)}")
             
             try:

@@ -317,6 +317,8 @@ def main():
                        help='Maximum sequence length')
     parser.add_argument('--early-stopping', type=int, default=10,
                        help='Early stopping patience')
+    parser.add_argument('--debug', action='store_true',
+                       help='Enable comprehensive debug logging for NaN detection')
     
     args = parser.parse_args()
     
@@ -338,14 +340,23 @@ def main():
     
     # Setup logging
     log_file = output_dir / f"ss4rec_training_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    log_level = logging.DEBUG if args.debug else logging.INFO
+    
     logging.basicConfig(
-        level=logging.INFO,
+        level=log_level,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler(log_file),
             logging.StreamHandler()
         ]
     )
+    
+    if args.debug:
+        logging.info("🔍 DEBUG MODE ENABLED - Comprehensive logging and NaN detection active")
+        logging.info("⚠️  Training performance will be significantly slower")
+        # Enable PyTorch anomaly detection for debugging
+        torch.autograd.set_detect_anomaly(True)
+        logging.info("🚨 PyTorch anomaly detection enabled")
     
     # Initialize W&B
     wandb.login()  # Authenticate with wandb
