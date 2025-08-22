@@ -42,6 +42,8 @@ def main():
                        help='Custom config file (optional)')
     parser.add_argument('--no-wandb', action='store_true',
                        help='Disable W&B logging')
+    parser.add_argument('--debug', action='store_true',
+                       help='Enable comprehensive debug logging for NaN detection')
     
     args = parser.parse_args()
     
@@ -50,6 +52,7 @@ def main():
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 Model: {args.model.upper()}
 🖥️  Device: {'CUDA' if torch.cuda.is_available() else 'CPU'}
+🔍 Debug Mode: {'ENABLED - NaN detection active' if args.debug else 'Disabled'}
 📅 Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """)
@@ -71,6 +74,11 @@ def main():
     # Load configuration
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
+    
+    # Add debug mode to config
+    config['debug_mode'] = args.debug
+    if args.debug:
+        print("🔍 Debug mode enabled - comprehensive logging and NaN detection active")
     
     # Initialize W&B if enabled
     if not args.no_wandb:
