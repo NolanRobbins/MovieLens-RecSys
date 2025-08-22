@@ -16,31 +16,39 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 def log_tensor_stats(tensor: Optional[torch.Tensor], name: str, step: str = "") -> None:
-    """Log comprehensive tensor statistics for debugging"""
+    """Log tensor statistics - smart mode for performance"""
     if tensor is None:
         logger.debug(f"🔍 [{step}] {name}: None")
         return
     
     # Handle different tensor types
     if tensor.dtype in [torch.float32, torch.float64, torch.float16]:
-        # Float tensors - full statistics
+        # Float tensors - check for issues first
         has_nan = torch.isnan(tensor).any()
         has_inf = torch.isinf(tensor).any()
+        has_large_values = tensor.abs().max() > 100.0
         
-        logger.debug(f"🔍 [{step}] {name}: shape={tensor.shape}, dtype={tensor.dtype}, "
-                    f"range=[{tensor.min():.6f}, {tensor.max():.6f}], "
-                    f"mean={tensor.mean():.6f}, std={tensor.std():.6f}, "
-                    f"nan_count={torch.isnan(tensor).sum()}, inf_count={torch.isinf(tensor).sum()}")
+        # Only log detailed stats if there are issues OR it's a key tensor
+        should_log_detailed = (has_nan or has_inf or has_large_values or 
+                              "initial" in name or "final" in name or 
+                              "output" in name or "loss" in name)
+        
+        if should_log_detailed:
+            logger.debug(f"🔍 [{step}] {name}: shape={tensor.shape}, dtype={tensor.dtype}, "
+                        f"range=[{tensor.min():.6f}, {tensor.max():.6f}], "
+                        f"mean={tensor.mean():.6f}, std={tensor.std():.6f}, "
+                        f"nan_count={torch.isnan(tensor).sum()}, inf_count={torch.isinf(tensor).sum()}")
         
         if has_nan:
             logger.error(f"🚨 NaN detected in {name} at step {step}!")
         if has_inf:
             logger.error(f"🚨 Inf detected in {name} at step {step}!")
     else:
-        # Integer tensors - basic statistics only
-        logger.debug(f"🔍 [{step}] {name}: shape={tensor.shape}, dtype={tensor.dtype}, "
-                    f"range=[{tensor.min()}, {tensor.max()}], "
-                    f"unique_values={tensor.unique().numel()}")
+        # Integer tensors - basic statistics only for key tensors
+        if "initial" in name or "final" in name:
+            logger.debug(f"🔍 [{step}] {name}: shape={tensor.shape}, dtype={tensor.dtype}, "
+                        f"range=[{tensor.min()}, {tensor.max()}], "
+                        f"unique_values={tensor.unique().numel()}")
 
 def apply_gradient_clipping(module: nn.Module, max_norm: float = 1.0) -> float:
     """
@@ -257,43 +265,41 @@ class S5Layer(nn.Module):
         for t in range(seq_len):
             # Update state: x_{t+1} = A * x_t + B * u_t
             u_t = x[:, t, :]  # [batch_size, d_model]
-            log_tensor_stats(u_t, f"u_t_{t}", "S5_timestep")
+            # Only log first, last, and problematic timesteps
+            if t == 0 or t == seq_len-1 or torch.isnan(u_t).any():
+                log_tensor_stats(u_t, f"u_t_{t}", "S5_timestep")
             
             # Fix: squeeze dA to get proper 2D tensor [batch_size, d_state]
             dA_t = dA[:, t, :]
             if dA_t.dim() > 2:
                 dA_t = dA_t.squeeze(1)  # Remove middle dimension
-            log_tensor_stats(dA_t, f"dA_t_{t}", "S5_timestep")
             
-            # Log einsum inputs
+            # Log einsum inputs for key timesteps only
             dB_t = dB[:, t, :, :]
-            log_tensor_stats(dB_t, f"dB_t_{t}", "S5_timestep")
             
-            logger.debug(f"🔍 Einsum 'bsd,bd->bs': dB_t.shape={dB_t.shape}, u_t.shape={u_t.shape}")
+            if t == 0 or t == seq_len-1:
+                logger.debug(f"🔍 Einsum 'bsd,bd->bs': dB_t.shape={dB_t.shape}, u_t.shape={u_t.shape}")
+            
             state_update = torch.einsum('bsd,bd->bs', dB_t, u_t)
             state_update = check_numerical_stability(state_update, f"state_update_{t}")
-            log_tensor_stats(state_update, f"state_update_{t}", "S5_timestep")
             
             # Check state update computation
             state_mult = dA_t * states
-            log_tensor_stats(state_mult, f"state_mult_{t}", "S5_timestep")
             
             states = state_mult + state_update
             states = check_numerical_stability(states, f"states_{t}")
-            log_tensor_stats(states, f"states_{t}", "S5_timestep")
             
             # Compute output: y_t = C * x_t + D * u_t
-            logger.debug(f"🔍 Einsum 'bs,ds->bd': states.shape={states.shape}, C.shape={self.C.shape}")
+            if t == 0 or t == seq_len-1:
+                logger.debug(f"🔍 Einsum 'bs,ds->bd': states.shape={states.shape}, C.shape={self.C.shape}")
+            
             states_contrib = torch.einsum('bs,ds->bd', states, self.C)
             states_contrib = check_numerical_stability(states_contrib, f"states_contrib_{t}")
-            log_tensor_stats(states_contrib, f"states_contrib_{t}", "S5_timestep")
             
             D_contrib = self.D * u_t
-            log_tensor_stats(D_contrib, f"D_contrib_{t}", "S5_timestep")
             
             y_t = states_contrib + D_contrib
             y_t = check_numerical_stability(y_t, f"y_t_{t}")
-            log_tensor_stats(y_t, f"y_t_{t}", "S5_timestep")
             
             outputs.append(y_t)
         
@@ -533,34 +539,23 @@ class MambaLayer(nn.Module):
             deltaB_t = deltaB[:, t]
             u_t = u[:, t].unsqueeze(-1)
             
-            log_tensor_stats(deltaA_t, f"scan_deltaA_t_{t}", "Scan_timestep")
-            log_tensor_stats(deltaB_t, f"scan_deltaB_t_{t}", "Scan_timestep")
-            log_tensor_stats(u_t, f"scan_u_t_{t}", "Scan_timestep")
-            
             # State multiplication and update
             state_mult = deltaA_t * x
-            log_tensor_stats(state_mult, f"scan_state_mult_{t}", "Scan_timestep")
-            
             state_input = deltaB_t * u_t
-            log_tensor_stats(state_input, f"scan_state_input_{t}", "Scan_timestep")
             
             x = state_mult + state_input
             x = check_numerical_stability(x, f"scan_state_{t}")
-            log_tensor_stats(x, f"scan_state_{t}", "Scan_timestep")
             
             # Compute output
             C_t = C[:, t]
-            logger.debug(f"🔍 Einsum 'bid,bd->bi': x.shape={x.shape}, C_t.shape={C_t.shape}")
+            if t == 0 or t == seq_len-1:
+                logger.debug(f"🔍 Einsum 'bid,bd->bi': x.shape={x.shape}, C_t.shape={C_t.shape}")
             
             einsum_result = torch.einsum('bid,bd->bi', x, C_t)
-            log_tensor_stats(einsum_result, f"scan_einsum_{t}", "Scan_timestep")
-            
             D_contrib = D * u[:, t]
-            log_tensor_stats(D_contrib, f"scan_D_contrib_{t}", "Scan_timestep")
             
             y = einsum_result + D_contrib
             y = check_numerical_stability(y, f"scan_output_{t}")
-            log_tensor_stats(y, f"scan_output_{t}", "Scan_timestep")
             
             outputs.append(y)
         
