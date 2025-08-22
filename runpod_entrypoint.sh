@@ -276,19 +276,48 @@ if [ ! -f "$CONFIG_FILE" ]; then
     fi
 fi
 
-# Google Drive download
-log "📥 Downloading training data from Google Drive..."
-
-# Ensure gdown is installed
-log "📦 Installing gdown for Google Drive downloads..."
-uv pip install -q gdown || error_exit "Failed to install gdown"
+# Smart data download - skip if files already exist and are valid
+log "📥 Checking training data availability..."
 
 mkdir -p data/processed
 
-# Download files from Google Drive using file IDs
-gdown --id 1a3KsSZWcPpSF5Qu_cb2rh7KtR57ypfjS -O data/processed/train_data.csv || error_exit "Failed to download train_data.csv"
-gdown --id 1GUXQGSVdm_pc_iqh05lvu3nVKRKij_jU -O data/processed/val_data.csv || error_exit "Failed to download val_data.csv"
-gdown --id 1hm8PM5DdPhlmAl6r8TsSekr-n5MGXmQh -O data/processed/data_mappings.pkl || error_exit "Failed to download data_mappings.pkl"
+# Check if files already exist and are valid
+NEED_DOWNLOAD=false
+REQUIRED_FILES=("data/processed/train_data.csv" "data/processed/val_data.csv" "data/processed/data_mappings.pkl")
+
+for file in "${REQUIRED_FILES[@]}"; do
+    if [ ! -f "$file" ]; then
+        log "❌ Missing: $file"
+        NEED_DOWNLOAD=true
+    else
+        # Check if file is not empty
+        if [ ! -s "$file" ]; then
+            log "❌ Empty file: $file"
+            NEED_DOWNLOAD=true
+        else
+            SIZE=$(ls -lh "$file" | awk '{print $5}')
+            log "✅ Found: $file ($SIZE)"
+        fi
+    fi
+done
+
+if [ "$NEED_DOWNLOAD" = true ]; then
+    log "📥 Downloading missing/invalid training data from Google Drive..."
+    
+    # Ensure gdown is installed
+    log "📦 Installing gdown for Google Drive downloads..."
+    uv pip install -q gdown || error_exit "Failed to install gdown"
+    
+    # Download files from Google Drive using file IDs
+    gdown --id 1a3KsSZWcPpSF5Qu_cb2rh7KtR57ypfjS -O data/processed/train_data.csv || error_exit "Failed to download train_data.csv"
+    gdown --id 1GUXQGSVdm_pc_iqh05lvu3nVKRKij_jU -O data/processed/val_data.csv || error_exit "Failed to download val_data.csv"
+    gdown --id 1hm8PM5DdPhlmAl6r8TsSekr-n5MGXmQh -O data/processed/data_mappings.pkl || error_exit "Failed to download data_mappings.pkl"
+    
+    log "✅ Download completed"
+else
+    log "✅ All training data files already present - skipping download"
+    log "💡 This saves significant time on subsequent runs!"
+fi
 
 
 # Verify required training files exist
