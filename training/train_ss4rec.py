@@ -248,14 +248,17 @@ def train_epoch(model: SS4Rec,
             progress_pct = (batch_idx / len(loader)) * 100
             logging.info(f'Epoch {epoch}, Batch {batch_idx}/{len(loader)} ({progress_pct:.1f}%), Loss: {current_loss:.6f}')
             
-            # Log batch-level progress to W&B (use global step counter)
+            # Log batch-level progress to W&B with proper commit
             global_step = (epoch - 1) * len(loader) + batch_idx
-            wandb.log({
-                'batch/loss': current_loss,
-                'batch/progress': progress_pct,
-                'batch/epoch': epoch,
-                'batch/batch_idx': batch_idx
-            }, commit=False)  # No step parameter for batch logs
+            try:
+                wandb.log({
+                    'batch_loss': current_loss,
+                    'batch_progress_pct': progress_pct,
+                    'global_step': global_step,
+                    'epoch': epoch
+                }, step=global_step)
+            except Exception as e:
+                logging.warning(f"Failed to log to wandb: {e}")
     
     return total_loss / num_batches
 
@@ -365,9 +368,15 @@ def main():
     if args.debug:
         logging.info("🔍 DEBUG MODE ENABLED - Comprehensive logging and NaN detection active")
         logging.info("⚠️  Training performance will be significantly slower")
+        # Set environment variable for SS4Rec model to use debug mode
+        os.environ['SS4REC_DEBUG_LOGGING'] = '1'
         # Enable PyTorch anomaly detection for debugging
         torch.autograd.set_detect_anomaly(True)
         logging.info("🚨 PyTorch anomaly detection enabled")
+    else:
+        # Ensure debug mode is disabled
+        os.environ['SS4REC_DEBUG_LOGGING'] = '0'
+        logging.info("🚀 PRODUCTION MODE - Optimized performance")
     
     # Initialize W&B
     wandb.login()  # Authenticate with wandb
@@ -384,8 +393,20 @@ def main():
         data_dir = Path('data/processed')
         
         train_data = pd.read_csv(data_dir / 'train_data.csv')
-        val_data = pd.read_csv(data_dir / 'val_data.csv')
-        # Test data should not be used during training - create empty dataframe with required columns
+        
+        # Check if val_data.csv exists, if not create from train split
+        val_data_path = data_dir / 'val_data.csv'
+        if val_data_path.exists():
+            val_data = pd.read_csv(val_data_path)
+        else:
+            logging.warning("val_data.csv not found, creating validation split from train data")
+            # Take last 20% of train data as validation
+            split_idx = int(len(train_data) * 0.8)
+            val_data = train_data.iloc[split_idx:].copy().reset_index(drop=True)
+            train_data = train_data.iloc[:split_idx].copy().reset_index(drop=True)
+            logging.info(f"Created validation split: Train={len(train_data)}, Val={len(val_data)}")
+        
+        # Test data should not be used during training - create empty dataframe
         test_data = pd.DataFrame(columns=['user_idx', 'movie_idx', 'rating', 'timestamp'])
         
         logging.info(f"Train: {len(train_data)}, Val: {len(val_data)}, Test: {len(test_data)}")

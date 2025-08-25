@@ -22,8 +22,15 @@ from .components.state_space_models import SSBlock
 # Set up logger - level controlled by training script
 logger = logging.getLogger(__name__)
 
+# Check if debug mode is enabled via environment variable
+import os
+DEBUG_MODE = os.getenv('SS4REC_DEBUG_LOGGING', '0') == '1'
+
 def log_tensor_stats(tensor: torch.Tensor, name: str, step: str = "") -> None:
-    """Log comprehensive tensor statistics for debugging"""
+    """Log comprehensive tensor statistics for debugging (only in debug mode)"""
+    if not DEBUG_MODE:
+        return  # Skip all logging in production mode
+    
     if tensor is None:
         logger.debug(f"🔍 [{step}] {name}: None")
         return
@@ -50,15 +57,17 @@ def log_tensor_stats(tensor: torch.Tensor, name: str, step: str = "") -> None:
                     f"unique_values={tensor.unique().numel()}")
 
 def check_numerical_stability(tensor: torch.Tensor, name: str, max_val: float = 1e6) -> torch.Tensor:
-    """Check and fix numerical stability issues"""
+    """Check and fix numerical stability issues (always active for safety)"""
     # Only check float tensors for NaN/Inf
     if tensor.dtype in [torch.float32, torch.float64, torch.float16]:
         if torch.isnan(tensor).any():
-            logger.error(f"🚨 NaN in {name} - replacing with zeros")
+            if DEBUG_MODE:
+                logger.error(f"🚨 NaN in {name} - replacing with zeros")
             tensor = torch.where(torch.isnan(tensor), torch.zeros_like(tensor), tensor)
         
         if torch.isinf(tensor).any():
-            logger.error(f"🚨 Inf in {name} - clamping to [{-max_val}, {max_val}]")
+            if DEBUG_MODE:
+                logger.error(f"🚨 Inf in {name} - clamping to [{-max_val}, {max_val}]")
             tensor = torch.clamp(tensor, min=-max_val, max=max_val)
     
     return tensor
@@ -169,7 +178,7 @@ class SS4Rec(nn.Module):
     
     def compute_time_intervals(self, timestamps: torch.Tensor) -> torch.Tensor:
         """
-        Compute time intervals between consecutive interactions
+        Compute time intervals between consecutive interactions (OPTIMIZED)
         
         Args:
             timestamps: Timestamp tensor [batch_size, seq_len]
@@ -177,54 +186,26 @@ class SS4Rec(nn.Module):
         Returns:
             Time intervals [batch_size, seq_len-1]
         """
-        logger.debug(f"🔄 compute_time_intervals: timestamps is None = {timestamps is None}")
-        
         if timestamps is None:
-            # If no timestamps, use uniform intervals
             batch_size, seq_len = timestamps.shape if timestamps is not None else (1, self.max_seq_len)
-            uniform_intervals = torch.ones(batch_size, seq_len - 1, device=self.item_embedding.weight.device)
-            log_tensor_stats(uniform_intervals, "uniform_time_intervals", "time_computation")
-            return uniform_intervals
+            return torch.ones(batch_size, seq_len - 1, device=self.item_embedding.weight.device) * 0.1
         
-        log_tensor_stats(timestamps, "input_timestamps", "time_computation")
-        
-        # Compute time differences (in seconds)
+        # Fast computation without excessive logging
         time_diffs = timestamps[:, 1:] - timestamps[:, :-1]
-        log_tensor_stats(time_diffs, "time_diffs_seconds", "time_computation")
+        time_intervals = time_diffs.float() / 86400.0  # Convert to days
         
-        # Convert to days first to avoid huge numbers
-        time_intervals = time_diffs.float() / 86400.0  # Convert seconds to days
-        log_tensor_stats(time_intervals, "time_intervals_days", "time_computation")
+        # Fix negative/zero intervals efficiently 
+        time_intervals = torch.where(time_intervals <= 0, 0.01, time_intervals)
         
-        # Check for negative time intervals (data ordering issues)
-        negative_count = (time_intervals < 0).sum()
-        if negative_count > 0:
-            logger.warning(f"🚨 Found {negative_count} negative time intervals - possible data ordering issue")
-            # Fix negative intervals by taking absolute value and adding small positive value
-            time_intervals = torch.where(time_intervals < 0, torch.abs(time_intervals) + 0.01, time_intervals)
-        
-        # Fix zero time differences (identical timestamps) with small positive value
-        zero_count = (time_intervals == 0.0).sum()
-        if zero_count > 0:
-            logger.debug(f"🔍 Fixed {zero_count} zero time intervals")
-        time_intervals = torch.where(time_intervals == 0.0, 0.01, time_intervals)
-        log_tensor_stats(time_intervals, "time_intervals_zero_fixed", "time_computation")
-        
-        # Clip extreme values (0.01 days = ~14 minutes, 365 days = 1 year)
-        extreme_count = ((time_intervals < 0.01) | (time_intervals > 365.0)).sum()
-        if extreme_count > 0:
+        # Clip extreme values silently (only warn if many extremes)
+        extreme_mask = (time_intervals > 365.0)
+        extreme_count = extreme_mask.sum()
+        if extreme_count > 1000:  # Only warn for major issues
             logger.warning(f"🚨 Clipping {extreme_count} extreme time intervals")
+        
         time_intervals = torch.clamp(time_intervals, min=0.01, max=365.0)
-        log_tensor_stats(time_intervals, "time_intervals_clipped", "time_computation")
-        
-        # Normalize to [0, 1] range for numerical stability
-        time_intervals = time_intervals / 365.0
-        log_tensor_stats(time_intervals, "time_intervals_normalized", "time_computation")
-        
-        # Additional safety: clamp to prevent any remaining extreme values
+        time_intervals = time_intervals / 365.0  # Normalize [0,1]
         time_intervals = torch.clamp(time_intervals, min=1e-6, max=1.0)
-        time_intervals = check_numerical_stability(time_intervals, "time_intervals_final")
-        log_tensor_stats(time_intervals, "time_intervals_final", "time_computation")
         
         return time_intervals
     
