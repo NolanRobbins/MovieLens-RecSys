@@ -166,12 +166,12 @@ if [ "$MODEL_TYPE" = "ss4rec" ] && [ -f "requirements_ss4rec.txt" ]; then
     # Install git for cloning repository
     apt-get update -qq && apt-get install -y git
     
-    # Try installing from GitHub repository with submodules
+    # Try installing from GitHub repository with submodules (using uv pip for virtual env)
     log "🔧 Installing mamba-ssm from GitHub repository..."
-    pip install git+https://github.com/state-spaces/mamba.git@v2.2.2 --no-build-isolation || \
+    uv pip install git+https://github.com/state-spaces/mamba.git@v2.2.2 --no-build-isolation || \
     log "⚠️  GitHub installation failed, trying PyPI with fallback..." && \
-    pip install mamba-ssm==2.2.2 --no-build-isolation || \
-    pip install mamba-ssm==2.0.2 --no-build-isolation || \
+    uv pip install mamba-ssm==2.2.2 --no-build-isolation || \
+    uv pip install mamba-ssm==2.0.2 --no-build-isolation || \
     error_exit "Failed to install any version of mamba-ssm"
     
     log "📦 Installing remaining SS4Rec dependencies..."
