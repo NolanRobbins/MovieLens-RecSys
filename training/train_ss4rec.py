@@ -244,7 +244,17 @@ def train_epoch(model: SS4Rec,
         num_batches += 1
         
         if batch_idx % log_interval == 0:
-            logging.info(f'Epoch {epoch}, Batch {batch_idx}/{len(loader)}, Loss: {loss.item():.6f}')
+            current_loss = loss.item()
+            progress_pct = (batch_idx / len(loader)) * 100
+            logging.info(f'Epoch {epoch}, Batch {batch_idx}/{len(loader)} ({progress_pct:.1f}%), Loss: {current_loss:.6f}')
+            
+            # Log batch-level progress to W&B
+            wandb.log({
+                'batch_loss': current_loss,
+                'batch_progress': progress_pct,
+                'current_epoch': epoch,
+                'current_batch': batch_idx
+            }, step=(epoch - 1) * len(loader) + batch_idx)
     
     return total_loss / num_batches
 
@@ -436,6 +446,14 @@ def main():
         
         for epoch in range(1, args.epochs + 1):
             epoch_start_time = time.time()
+            logging.info(f"Starting Epoch {epoch}/{args.epochs} - SS4Rec Training")
+            
+            # Log epoch start to W&B  
+            wandb.log({
+                'epoch_start': epoch,
+                'total_epochs': args.epochs,
+                'epoch_progress': (epoch / args.epochs) * 100
+            }, step=epoch)
             
             # Train
             train_loss = train_epoch(
@@ -464,7 +482,7 @@ def main():
                 f"Time: {epoch_time:.1f}s"
             )
             
-            # W&B logging
+            # W&B logging with explicit step
             wandb.log({
                 'epoch': epoch,
                 'train_loss': train_loss,
@@ -473,7 +491,7 @@ def main():
                 'val_mae': val_mae,
                 'learning_rate': current_lr,
                 'epoch_time': epoch_time
-            })
+            }, step=epoch)
             
             # Save best model
             if val_rmse < best_val_rmse:
@@ -523,7 +541,7 @@ def main():
             'test_mae': test_mae,
             'best_val_rmse': best_val_rmse,
             'best_epoch': best_epoch
-        })
+        }, step=best_epoch)
         
         # Save final results
         results = {
