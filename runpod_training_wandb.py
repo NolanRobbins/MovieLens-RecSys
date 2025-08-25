@@ -79,14 +79,16 @@ def main():
     if args.debug:
         print("🔍 Debug mode enabled - comprehensive logging and NaN detection active")
     
-    # Initialize W&B if enabled
-    if not args.no_wandb:
+    # Initialize W&B if enabled (NCF only - SS4Rec handles its own W&B)
+    if not args.no_wandb and args.model == 'ncf':
         try:
             setup_wandb(config, args.model)
             print("✅ W&B initialized successfully")
         except Exception as e:
             print(f"⚠️  W&B initialization failed: {e}")
             print("Continuing without W&B logging...")
+    elif args.model == 'ss4rec':
+        print("📊 W&B will be handled by SS4Rec training script")
     
     # Train based on model type
     try:
