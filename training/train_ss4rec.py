@@ -250,11 +250,11 @@ def train_epoch(model: SS4Rec,
             
             # Log batch-level progress to W&B
             wandb.log({
-                'batch_loss': current_loss,
-                'batch_progress': progress_pct,
-                'current_epoch': epoch,
-                'current_batch': batch_idx
-            }, step=(epoch - 1) * len(loader) + batch_idx)
+                'train/batch_loss': current_loss,
+                'train/batch_progress': progress_pct,
+                'train/current_epoch': epoch,
+                'train/current_batch': batch_idx
+            }, step=(epoch - 1) * len(loader) + batch_idx, commit=False)
     
     return total_loss / num_batches
 
@@ -450,10 +450,10 @@ def main():
             
             # Log epoch start to W&B  
             wandb.log({
-                'epoch_start': epoch,
-                'total_epochs': args.epochs,
-                'epoch_progress': (epoch / args.epochs) * 100
-            }, step=epoch)
+                'train/epoch_start': epoch,
+                'train/total_epochs': args.epochs,
+                'train/overall_progress': (epoch / args.epochs) * 100
+            }, step=epoch, commit=False)
             
             # Train
             train_loss = train_epoch(
@@ -482,16 +482,17 @@ def main():
                 f"Time: {epoch_time:.1f}s"
             )
             
-            # W&B logging with explicit step
+            # W&B logging with explicit step and commit
             wandb.log({
-                'epoch': epoch,
-                'train_loss': train_loss,
-                'val_loss': val_loss,
-                'val_rmse': val_rmse,
-                'val_mae': val_mae,
-                'learning_rate': current_lr,
-                'epoch_time': epoch_time
-            }, step=epoch)
+                'train/loss': train_loss,
+                'train/epoch': epoch,
+                'val/loss': val_loss, 
+                'val/rmse': val_rmse,
+                'val/mae': val_mae,
+                'train/learning_rate': current_lr,
+                'train/epoch_time': epoch_time,
+                'train/progress': epoch / args.epochs * 100
+            }, step=epoch, commit=True)
             
             # Save best model
             if val_rmse < best_val_rmse:
@@ -536,12 +537,13 @@ def main():
         
         # Log final results
         wandb.log({
-            'test_loss': test_loss,
-            'test_rmse': test_rmse,
-            'test_mae': test_mae,
-            'best_val_rmse': best_val_rmse,
-            'best_epoch': best_epoch
-        }, step=best_epoch)
+            'test/loss': test_loss,
+            'test/rmse': test_rmse,
+            'test/mae': test_mae,
+            'final/best_val_rmse': best_val_rmse,
+            'final/best_epoch': best_epoch,
+            'final/training_complete': True
+        }, step=best_epoch, commit=True)
         
         # Save final results
         results = {
