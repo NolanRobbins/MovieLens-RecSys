@@ -15,8 +15,54 @@ import torch.nn.functional as F
 import math
 from typing import Optional, Dict, Tuple
 import numpy as np
+import logging
 
 from .components.state_space_models import SSBlock
+
+# Set up debug logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+def log_tensor_stats(tensor: torch.Tensor, name: str, step: str = "") -> None:
+    """Log comprehensive tensor statistics for debugging"""
+    if tensor is None:
+        logger.debug(f"🔍 [{step}] {name}: None")
+        return
+    
+    # Handle different tensor types
+    if tensor.dtype in [torch.float32, torch.float64, torch.float16]:
+        # Float tensors - full statistics
+        has_nan = torch.isnan(tensor).any()
+        has_inf = torch.isinf(tensor).any()
+        
+        logger.debug(f"🔍 [{step}] {name}: shape={tensor.shape}, dtype={tensor.dtype}, "
+                    f"range=[{tensor.min():.6f}, {tensor.max():.6f}], "
+                    f"mean={tensor.mean():.6f}, std={tensor.std():.6f}, "
+                    f"nan_count={torch.isnan(tensor).sum()}, inf_count={torch.isinf(tensor).sum()}")
+        
+        if has_nan:
+            logger.error(f"🚨 NaN detected in {name} at step {step}!")
+        if has_inf:
+            logger.error(f"🚨 Inf detected in {name} at step {step}!")
+    else:
+        # Integer tensors - basic statistics only
+        logger.debug(f"🔍 [{step}] {name}: shape={tensor.shape}, dtype={tensor.dtype}, "
+                    f"range=[{tensor.min()}, {tensor.max()}], "
+                    f"unique_values={tensor.unique().numel()}")
+
+def check_numerical_stability(tensor: torch.Tensor, name: str, max_val: float = 1e6) -> torch.Tensor:
+    """Check and fix numerical stability issues"""
+    # Only check float tensors for NaN/Inf
+    if tensor.dtype in [torch.float32, torch.float64, torch.float16]:
+        if torch.isnan(tensor).any():
+            logger.error(f"🚨 NaN in {name} - replacing with zeros")
+            tensor = torch.where(torch.isnan(tensor), torch.zeros_like(tensor), tensor)
+        
+        if torch.isinf(tensor).any():
+            logger.error(f"🚨 Inf in {name} - clamping to [{-max_val}, {max_val}]")
+            tensor = torch.clamp(tensor, min=-max_val, max=max_val)
+    
+    return tensor
 
 
 class SS4Rec(nn.Module):
@@ -132,36 +178,54 @@ class SS4Rec(nn.Module):
         Returns:
             Time intervals [batch_size, seq_len-1]
         """
+        logger.debug(f"🔄 compute_time_intervals: timestamps is None = {timestamps is None}")
+        
         if timestamps is None:
             # If no timestamps, use uniform intervals
             batch_size, seq_len = timestamps.shape if timestamps is not None else (1, self.max_seq_len)
-            return torch.ones(batch_size, seq_len - 1, device=self.item_embedding.weight.device)
+            uniform_intervals = torch.ones(batch_size, seq_len - 1, device=self.item_embedding.weight.device)
+            log_tensor_stats(uniform_intervals, "uniform_time_intervals", "time_computation")
+            return uniform_intervals
+        
+        log_tensor_stats(timestamps, "input_timestamps", "time_computation")
         
         # Compute time differences (in seconds)
         time_diffs = timestamps[:, 1:] - timestamps[:, :-1]
-        
-        # Debug: check for extreme values
-        print(f"DEBUG: time_diffs range: [{time_diffs.min():.2f}, {time_diffs.max():.2f}]")
+        log_tensor_stats(time_diffs, "time_diffs_seconds", "time_computation")
         
         # Convert to days first to avoid huge numbers
         time_intervals = time_diffs.float() / 86400.0  # Convert seconds to days
-        print(f"DEBUG: time_intervals in days: [{time_intervals.min():.6f}, {time_intervals.max():.6f}]")
+        log_tensor_stats(time_intervals, "time_intervals_days", "time_computation")
+        
+        # Check for negative time intervals (data ordering issues)
+        negative_count = (time_intervals < 0).sum()
+        if negative_count > 0:
+            logger.warning(f"🚨 Found {negative_count} negative time intervals - possible data ordering issue")
+            # Fix negative intervals by taking absolute value and adding small positive value
+            time_intervals = torch.where(time_intervals < 0, torch.abs(time_intervals) + 0.01, time_intervals)
         
         # Fix zero time differences (identical timestamps) with small positive value
+        zero_count = (time_intervals == 0.0).sum()
+        if zero_count > 0:
+            logger.debug(f"🔍 Fixed {zero_count} zero time intervals")
         time_intervals = torch.where(time_intervals == 0.0, 0.01, time_intervals)
-        print(f"DEBUG: after zero fix: [{time_intervals.min():.6f}, {time_intervals.max():.6f}]")
+        log_tensor_stats(time_intervals, "time_intervals_zero_fixed", "time_computation")
         
         # Clip extreme values (0.01 days = ~14 minutes, 365 days = 1 year)
+        extreme_count = ((time_intervals < 0.01) | (time_intervals > 365.0)).sum()
+        if extreme_count > 0:
+            logger.warning(f"🚨 Clipping {extreme_count} extreme time intervals")
         time_intervals = torch.clamp(time_intervals, min=0.01, max=365.0)
-        print(f"DEBUG: after clamp: [{time_intervals.min():.6f}, {time_intervals.max():.6f}]")
+        log_tensor_stats(time_intervals, "time_intervals_clipped", "time_computation")
         
         # Normalize to [0, 1] range for numerical stability
         time_intervals = time_intervals / 365.0
-        print(f"DEBUG: after normalize: [{time_intervals.min():.6f}, {time_intervals.max():.6f}]")
+        log_tensor_stats(time_intervals, "time_intervals_normalized", "time_computation")
         
         # Additional safety: clamp to prevent any remaining extreme values
         time_intervals = torch.clamp(time_intervals, min=1e-6, max=1.0)
-        print(f"DEBUG: final time_intervals: [{time_intervals.min():.6f}, {time_intervals.max():.6f}]")
+        time_intervals = check_numerical_stability(time_intervals, "time_intervals_final")
+        log_tensor_stats(time_intervals, "time_intervals_final", "time_computation")
         
         return time_intervals
     
@@ -179,28 +243,57 @@ class SS4Rec(nn.Module):
             Encoded sequence [batch_size, seq_len, d_model]
         """
         batch_size, seq_len = item_seq.shape
+        logger.debug(f"🔄 encode_sequence: batch_size={batch_size}, seq_len={seq_len}")
+        
+        # Log input tensors
+        log_tensor_stats(item_seq, "input_item_seq", "encode_start")
+        if timestamps is not None:
+            log_tensor_stats(timestamps, "input_timestamps", "encode_start")
         
         # Item embeddings
         item_emb = self.item_embedding(item_seq)  # [batch_size, seq_len, d_model]
+        item_emb = check_numerical_stability(item_emb, "item_embeddings")
+        log_tensor_stats(item_emb, "item_embeddings", "encode_embeddings")
         
         # Position embeddings
         positions = torch.arange(seq_len, device=item_seq.device).unsqueeze(0).expand(batch_size, seq_len)
+        log_tensor_stats(positions, "position_indices", "encode_embeddings")
+        
         pos_emb = self.position_embedding(positions)
+        pos_emb = check_numerical_stability(pos_emb, "position_embeddings")
+        log_tensor_stats(pos_emb, "position_embeddings", "encode_embeddings")
         
         # Combine embeddings
         x = item_emb + pos_emb
+        x = check_numerical_stability(x, "combined_embeddings")
+        log_tensor_stats(x, "combined_embeddings", "encode_embeddings")
+        
         x = self.dropout(x)
+        log_tensor_stats(x, "embeddings_after_dropout", "encode_embeddings")
         
         # Compute time intervals
         time_intervals = self.compute_time_intervals(timestamps) if timestamps is not None else None
+        if time_intervals is not None:
+            log_tensor_stats(time_intervals, "computed_time_intervals", "encode_time")
         
         # Process through state space blocks
-        for ss_block in self.ss_blocks:
+        for i, ss_block in enumerate(self.ss_blocks):
+            logger.debug(f"🔍 Processing SS block {i+1}/{len(self.ss_blocks)}")
+            x_before = x.clone()
             x = ss_block(x, time_intervals)
+            x = check_numerical_stability(x, f"ss_block_{i}_output")
+            log_tensor_stats(x, f"ss_block_{i}_output", "encode_ss_blocks")
+            
+            # Check for vanishing/exploding gradients
+            change_magnitude = (x - x_before).abs().mean()
+            logger.debug(f"🔍 SS block {i} change magnitude: {change_magnitude:.6f}")
         
         # Final normalization
         x = self.layer_norm(x)
+        x = check_numerical_stability(x, "final_layer_norm")
+        log_tensor_stats(x, "final_normalized_sequence", "encode_finalization")
         
+        logger.debug(f"✅ encode_sequence completed successfully")
         return x
     
     def forward(self, 
@@ -220,57 +313,74 @@ class SS4Rec(nn.Module):
         Returns:
             Predictions (ratings or scores) [batch_size] or [batch_size, n_candidates]
         """
+        logger.debug(f"🔄 SS4Rec.forward: users.shape={users.shape}, item_seq.shape={item_seq.shape}")
+        log_tensor_stats(users, "input_users", "forward_start")
+        log_tensor_stats(item_seq, "input_item_seq", "forward_start")
+        if target_items is not None:
+            log_tensor_stats(target_items, "input_target_items", "forward_start")
+        if timestamps is not None:
+            log_tensor_stats(timestamps, "input_timestamps", "forward_start")
+        
         # Encode sequence
         seq_output = self.encode_sequence(item_seq, timestamps)
-        if torch.isnan(seq_output).any():
-            print(f"NaN in seq_output after encode_sequence!")
-            print(f"seq_output stats: min={seq_output.min()}, max={seq_output.max()}, nan_count={torch.isnan(seq_output).sum()}")
+        seq_output = check_numerical_stability(seq_output, "sequence_output")
+        log_tensor_stats(seq_output, "sequence_output", "forward_encoding")
         
         # Get user embeddings
         user_emb = self.user_embedding(users)  # [batch_size, d_model]
-        if torch.isnan(user_emb).any():
-            print(f"NaN in user_emb!")
-            print(f"user_emb stats: min={user_emb.min()}, max={user_emb.max()}, nan_count={torch.isnan(user_emb).sum()}")
+        user_emb = check_numerical_stability(user_emb, "user_embeddings")
+        log_tensor_stats(user_emb, "user_embeddings", "forward_user_emb")
         
         if self.rating_prediction:
             # Rating prediction mode
             # Use last item's representation + user embedding
             seq_repr = seq_output[:, -1, :]  # [batch_size, d_model]
+            log_tensor_stats(seq_repr, "sequence_representation", "forward_rating_prediction")
             
             if target_items is not None:
+                logger.debug(f"🔍 Predicting ratings for specific target items")
+                
                 # Predict rating for specific target items
                 target_emb = self.item_embedding(target_items)  # [batch_size, d_model]
+                target_emb = check_numerical_stability(target_emb, "target_item_embeddings")
+                log_tensor_stats(target_emb, "target_item_embeddings", "forward_rating_prediction")
                 
                 # Combine user, sequence, and target item representations
+                user_context = user_emb + seq_repr
+                log_tensor_stats(user_context, "user_context", "forward_rating_prediction")
+                
                 combined = torch.cat([
-                    user_emb + seq_repr,  # User context
+                    user_context,  # User context
                     target_emb  # Target item
                 ], dim=-1)  # [batch_size, d_model * 2]
                 
+                combined = check_numerical_stability(combined, "combined_features")
+                log_tensor_stats(combined, "combined_features", "forward_rating_prediction")
+                
                 # Predict rating
-                if torch.isnan(combined).any():
-                    print(f"NaN in combined tensor before rating_head!")
-                    print(f"combined stats: min={combined.min()}, max={combined.max()}, nan_count={torch.isnan(combined).sum()}")
-                    print(f"user_emb + seq_repr stats: min={(user_emb + seq_repr).min()}, max={(user_emb + seq_repr).max()}")
-                    print(f"target_emb stats: min={target_emb.min()}, max={target_emb.max()}")
-                
                 ratings = self.rating_head(combined).squeeze(-1)  # [batch_size]
+                ratings = check_numerical_stability(ratings, "predicted_ratings")
+                log_tensor_stats(ratings, "predicted_ratings", "forward_rating_prediction")
                 
-                if torch.isnan(ratings).any():
-                    print(f"NaN in ratings after rating_head!")
-                    print(f"ratings stats: min={ratings.min()}, max={ratings.max()}, nan_count={torch.isnan(ratings).sum()}")
+                logger.debug(f"✅ Rating prediction completed successfully")
                 return ratings
             else:
                 # Return sequence representation for further processing
                 return seq_repr
         
         else:
+            logger.debug(f"🔍 Ranking mode - scoring all items")
+            
             # Ranking mode (original SS4Rec)
             seq_repr = seq_output[:, -1, :]  # [batch_size, d_model]
+            log_tensor_stats(seq_repr, "sequence_representation_ranking", "forward_ranking")
             
             # Score all items
             item_scores = self.output_layer(seq_repr)  # [batch_size, n_items]
+            item_scores = check_numerical_stability(item_scores, "item_scores")
+            log_tensor_stats(item_scores, "item_scores", "forward_ranking")
             
+            logger.debug(f"✅ Ranking completed successfully")
             return item_scores
     
     def predict_all_items(self, 
@@ -289,26 +399,47 @@ class SS4Rec(nn.Module):
             Predicted ratings for all items [batch_size, n_items]
         """
         batch_size = users.shape[0]
+        logger.debug(f"🔄 predict_all_items: batch_size={batch_size}, n_items={self.n_items}")
+        
+        log_tensor_stats(users, "predict_all_users", "predict_all_start")
+        log_tensor_stats(item_seq, "predict_all_item_seq", "predict_all_start")
+        if timestamps is not None:
+            log_tensor_stats(timestamps, "predict_all_timestamps", "predict_all_start")
         
         # Get sequence representation
         seq_repr = self.encode_sequence(item_seq, timestamps)[:, -1, :]  # [batch_size, d_model]
+        seq_repr = check_numerical_stability(seq_repr, "predict_all_seq_repr")
+        log_tensor_stats(seq_repr, "predict_all_seq_repr", "predict_all_encoding")
+        
         user_emb = self.user_embedding(users)  # [batch_size, d_model]
+        user_emb = check_numerical_stability(user_emb, "predict_all_user_emb")
+        log_tensor_stats(user_emb, "predict_all_user_emb", "predict_all_encoding")
         
         # Predict ratings for all items
         all_ratings = []
         
         # Process in chunks to avoid memory issues
         chunk_size = 1000
-        for start_idx in range(0, self.n_items, chunk_size):
+        logger.debug(f"🔍 Processing {self.n_items} items in chunks of {chunk_size}")
+        
+        for chunk_idx, start_idx in enumerate(range(0, self.n_items, chunk_size)):
             end_idx = min(start_idx + chunk_size, self.n_items)
+            current_chunk_size = end_idx - start_idx
+            
+            logger.debug(f"🔍 Processing chunk {chunk_idx+1}: items {start_idx} to {end_idx-1} ({current_chunk_size} items)")
+            
             item_ids = torch.arange(start_idx, end_idx, device=users.device)
+            log_tensor_stats(item_ids, f"chunk_{chunk_idx}_item_ids", "predict_all_chunk")
             
             # Expand for batch processing
             item_ids_batch = item_ids.unsqueeze(0).expand(batch_size, -1)  # [batch_size, chunk_size]
             item_emb_batch = self.item_embedding(item_ids_batch)  # [batch_size, chunk_size, d_model]
+            item_emb_batch = check_numerical_stability(item_emb_batch, f"chunk_{chunk_idx}_item_emb")
+            log_tensor_stats(item_emb_batch, f"chunk_{chunk_idx}_item_emb", "predict_all_chunk")
             
             # Expand user and sequence representations
             user_seq_repr = (user_emb + seq_repr).unsqueeze(1).expand(-1, item_ids_batch.shape[1], -1)
+            log_tensor_stats(user_seq_repr, f"chunk_{chunk_idx}_user_seq_repr", "predict_all_chunk")
             
             # Combine representations
             combined = torch.cat([
@@ -316,14 +447,24 @@ class SS4Rec(nn.Module):
                 item_emb_batch  # [batch_size, chunk_size, d_model]
             ], dim=-1)  # [batch_size, chunk_size, d_model * 2]
             
+            combined = check_numerical_stability(combined, f"chunk_{chunk_idx}_combined")
+            log_tensor_stats(combined, f"chunk_{chunk_idx}_combined", "predict_all_chunk")
+            
             # Predict ratings
             chunk_ratings = self.rating_head(combined).squeeze(-1)  # [batch_size, chunk_size]
+            chunk_ratings = check_numerical_stability(chunk_ratings, f"chunk_{chunk_idx}_ratings")
+            log_tensor_stats(chunk_ratings, f"chunk_{chunk_idx}_ratings", "predict_all_chunk")
+            
             all_ratings.append(chunk_ratings)
         
-        return torch.cat(all_ratings, dim=1)  # [batch_size, n_items]
+        final_ratings = torch.cat(all_ratings, dim=1)  # [batch_size, n_items]
+        log_tensor_stats(final_ratings, "predict_all_final_ratings", "predict_all_completion")
+        
+        logger.debug(f"✅ predict_all_items completed successfully")
+        return final_ratings
 
 
-def create_ss4rec_model(n_users: int, n_items: int, config: dict = None) -> SS4Rec:
+def create_ss4rec_model(n_users: int, n_items: int, config: Optional[Dict] = None) -> SS4Rec:
     """
     Factory function to create SS4Rec model with default or custom config
     

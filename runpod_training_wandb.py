@@ -21,7 +21,6 @@ sys.path.append(str(Path(__file__).parent))
 
 # Import our training modules
 from training.train_ncf import NCFTrainer
-# from training.train_ss4rec import SS4RecTrainer  # Will be available after SS4Rec implementation
 
 
 def setup_wandb(config: dict, model_type: str) -> None:
