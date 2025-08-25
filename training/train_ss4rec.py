@@ -248,14 +248,14 @@ def train_epoch(model: SS4Rec,
             progress_pct = (batch_idx / len(loader)) * 100
             logging.info(f'Epoch {epoch}, Batch {batch_idx}/{len(loader)} ({progress_pct:.1f}%), Loss: {current_loss:.6f}')
             
-            # Log batch-level progress to W&B with proper commit
-            global_step = (epoch - 1) * len(loader) + batch_idx
+            # Log batch-level progress to W&B with proper step management
+            global_step = (epoch - 1) * len(loader) + batch_idx + 1  # +1 to avoid step 0
             try:
                 wandb.log({
                     'batch_loss': current_loss,
                     'batch_progress_pct': progress_pct,
-                    'global_step': global_step,
-                    'epoch': epoch
+                    'epoch_num': epoch,
+                    'batch_num': batch_idx
                 }, step=global_step)
             except Exception as e:
                 logging.warning(f"Failed to log to wandb: {e}")
@@ -470,11 +470,12 @@ def main():
             epoch_start_time = time.time()
             logging.info(f"Starting Epoch {epoch}/{args.epochs} - SS4Rec Training")
             
-            # Log epoch start (minimal logging)
+            # Log epoch start with consistent step counter
+            epoch_start_step = (epoch - 1) * len(train_loader) + 1
             wandb.log({
-                'epoch/start': epoch,
-                'epoch/total': args.epochs
-            }, step=epoch, commit=False)
+                'epoch_start': epoch,
+                'total_epochs': args.epochs
+            }, step=epoch_start_step)
             
             # Train
             train_loss = train_epoch(
@@ -503,7 +504,8 @@ def main():
                 f"Time: {epoch_time:.1f}s"
             )
             
-            # W&B epoch metrics logging
+            # W&B epoch metrics logging - use same step counter as batches
+            epoch_step = epoch * len(train_loader)  # End of epoch step
             wandb.log({
                 'train_loss': train_loss,
                 'val_loss': val_loss, 
@@ -511,8 +513,8 @@ def main():
                 'val_mae': val_mae,
                 'learning_rate': current_lr,
                 'epoch_time': epoch_time,
-                'progress_pct': epoch / args.epochs * 100
-            }, step=epoch)
+                'epoch_progress_pct': epoch / args.epochs * 100
+            }, step=epoch_step)
             
             # Save best model
             if val_rmse < best_val_rmse:
