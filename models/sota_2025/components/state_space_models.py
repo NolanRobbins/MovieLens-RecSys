@@ -11,9 +11,8 @@ from typing import Optional, Tuple
 import numpy as np
 import logging
 
-# Set up debug logger
+# Set up logger - level controlled by training script  
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 def log_tensor_stats(tensor: Optional[torch.Tensor], name: str, step: str = "") -> None:
     """Log tensor statistics - smart mode for performance"""

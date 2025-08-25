@@ -19,9 +19,8 @@ import logging
 
 from .components.state_space_models import SSBlock
 
-# Set up debug logger
+# Set up logger - level controlled by training script
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 def log_tensor_stats(tensor: torch.Tensor, name: str, step: str = "") -> None:
     """Log comprehensive tensor statistics for debugging"""
