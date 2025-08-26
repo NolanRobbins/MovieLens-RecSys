@@ -10,3 +10,4 @@ sqlalchemy
 requests
 tqdm
 scipy
+wandb
