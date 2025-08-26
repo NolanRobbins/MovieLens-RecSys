@@ -1,0 +1,81 @@
+# SS4Rec A6000-Balanced Configuration
+# Optimized for stable GPU utilization without NaN crashes
+# Conservative scaling from proven working config (ss4rec_fast.yaml)
+
+model:
+  name: "ss4rec"
+  type: "sequential_recommendation"
+  
+  # Proven stable model parameters
+  d_model: 64               # Model dimension (embedding size)
+  n_layers: 2               # Number of SS blocks
+  d_state: 16               # State space dimension
+  d_conv: 4                 # Convolution dimension
+  expand: 2                 # Expansion factor for Mamba
+  dt_min: 0.001             # Minimum discretization step
+  dt_max: 0.1               # Maximum discretization step
+  dropout: 0.1              # Dropout probability
+  max_seq_len: 75           # BALANCED: 50% increase from stable 50 → 75
+  rating_prediction: true   # Enable rating prediction mode
+    
+training:
+  batch_size: 512           # BALANCED: 2x increase from stable 256 → 512 (not 8x)
+  num_epochs: 10            # Full training epochs
+  learning_rate: 0.001      # AdamW learning rate
+  weight_decay: 0.00001     # L2 regularization
+  early_stopping: 5         # Early stopping patience
+  gradient_clip: 0.5        # CONSERVATIVE: Tighter gradient clipping for stability
+  mixed_precision: false    # DISABLED: Causes NaN crashes with SS4Rec state space operations
+  
+  # Learning rate scheduler
+  scheduler:
+    type: "ReduceLROnPlateau"
+    mode: "min"
+    factor: 0.5
+    patience: 3
+    
+data:
+  # Sequential data parameters (CONTROLLED SCALING)
+  min_seq_len: 5            # Minimum sequence length
+  max_sequences_per_user: 5 # CRITICAL: Same as working config
+  test_split: 0.2           # Test set ratio
+  val_split: 0.1            # Validation set ratio
+  seed: 42                  # Random seed
+  
+paths:
+  data_dir: "data/processed"
+  model_dir: "results/ss4rec_a6000_balanced"
+  log_dir: "logs"
+  cache_dir: "data/cache"
+
+# Weights & Biases configuration
+wandb:
+  project: "movielens-ss4rec-a6000-balanced"
+  tags: 
+    - "ss4rec"
+    - "a6000-balanced"
+    - "stable-scaling"
+  notes: "A6000 balanced config - 2x batch size from stable baseline"
+
+# Hardware optimization for A6000 (conservative)
+hardware:
+  device: "auto"
+  num_workers: 6            # BALANCED: Between 4 (fast) and 8 (aggressive)
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 2        # Conservative prefetching
+
+# Logging configuration
+logging:
+  level: "INFO"
+  log_interval: 50          # Log every 50 batches (more batches per epoch now)
+  save_model_every: 1       # Save checkpoint every epoch
+
+# Expected performance with this config:
+# - Batch size: 512 (2x increase from stable 256)
+# - Sequence length: 75 (1.5x increase from stable 50)
+# - Dataset: ~850K samples (same as working config)
+# - Batches per epoch: ~1,660 (850K / 512)
+# - Expected GPU utilization: 60-80% (improvement from 40-80%)
+# - Expected stability: HIGH (conservative scaling from proven config)
+# - Training time: Faster than batch_size=256 but much more stable than batch_size=2048

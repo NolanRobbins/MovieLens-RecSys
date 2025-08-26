@@ -1,0 +1,83 @@
+# SS4Rec A6000-Progressive Configuration
+# Aggressive but stable GPU utilization without mixed precision
+# Next step up from balanced config if that works well
+
+model:
+  name: "ss4rec"
+  type: "sequential_recommendation"
+  
+  # Proven stable model parameters
+  d_model: 64               # Model dimension (embedding size)
+  n_layers: 2               # Number of SS blocks
+  d_state: 16               # State space dimension
+  d_conv: 4                 # Convolution dimension
+  expand: 2                 # Expansion factor for Mamba
+  dt_min: 0.001             # Minimum discretization step
+  dt_max: 0.1               # Maximum discretization step
+  dropout: 0.1              # Dropout probability
+  max_seq_len: 100          # PROGRESSIVE: Full sequence length for better patterns
+  rating_prediction: true   # Enable rating prediction mode
+    
+training:
+  batch_size: 1024          # PROGRESSIVE: 4x increase from stable baseline (256→1024)
+  num_epochs: 10            # Full training epochs
+  learning_rate: 0.001      # AdamW learning rate
+  weight_decay: 0.00001     # L2 regularization
+  early_stopping: 5         # Early stopping patience
+  gradient_clip: 0.5        # CONSERVATIVE: Tight clipping for numerical stability
+  mixed_precision: false    # DISABLED: Causes NaN issues with SS4Rec state space ops
+  
+  # Learning rate scheduler
+  scheduler:
+    type: "ReduceLROnPlateau"
+    mode: "min"
+    factor: 0.5
+    patience: 3
+    
+data:
+  # Sequential data parameters
+  min_seq_len: 5            # Minimum sequence length
+  max_sequences_per_user: 5 # CRITICAL: Keep dataset controlled
+  test_split: 0.2           # Test set ratio
+  val_split: 0.1            # Validation set ratio
+  seed: 42                  # Random seed
+  
+paths:
+  data_dir: "data/processed"
+  model_dir: "results/ss4rec_a6000_progressive"
+  log_dir: "logs"
+  cache_dir: "data/cache"
+
+# Weights & Biases configuration
+wandb:
+  project: "movielens-ss4rec-a6000-progressive"
+  tags: 
+    - "ss4rec"
+    - "a6000-progressive"
+    - "no-mixed-precision"
+    - "high-throughput"
+  notes: "Progressive A6000 optimization - 4x batch size, no mixed precision"
+
+# Hardware optimization for A6000
+hardware:
+  device: "auto"
+  num_workers: 8            # Full parallelism for A6000
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 4        # Aggressive prefetching for throughput
+
+# Logging configuration
+logging:
+  level: "INFO"
+  log_interval: 20          # Log every 20 batches
+  save_model_every: 1       # Save checkpoint every epoch
+
+# Expected performance with this config:
+# - Batch size: 1024 (4x increase from stable 256)
+# - Sequence length: 100 (2x increase from stable 50)  
+# - Dataset: ~850K samples (controlled by max_sequences_per_user=5)
+# - Batches per epoch: ~830 (850K / 1024)
+# - Expected GPU utilization: 75-90% (major improvement)
+# - Expected epoch time: 10-15 minutes (vs 276 hours original)
+# - Mixed precision: DISABLED (prevents NaN crashes)
+# - Training stability: HIGH (FP32 + tight gradient clipping)
