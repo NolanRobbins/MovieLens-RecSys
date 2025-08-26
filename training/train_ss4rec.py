@@ -25,6 +25,7 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import wandb
+import yaml
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -140,10 +141,10 @@ class MovieLensSequentialDataset(Dataset):
         item_seq[:seq_len] = seq_data['item_sequence']
         timestamp_seq[:seq_len] = seq_data['timestamp_sequence']
         
-        # Fix: Pad timestamps with the last timestamp instead of zeros to maintain temporal order
+        # CRITICAL FIX: Use zero padding for SSM stability - State Space Models expect proper padding
+        # Using last_timestamp breaks mathematical assumptions and causes gradient instability
         if seq_len < self.max_seq_len and seq_len > 0:
-            last_timestamp = seq_data['timestamp_sequence'][-1]
-            timestamp_seq[seq_len:] = last_timestamp
+            timestamp_seq[seq_len:] = 0.0  # Zero padding for SSM stability
         
         return {
             'user_id': torch.tensor(seq_data['user_id'], dtype=torch.long),
@@ -309,6 +310,61 @@ def evaluate_model(model: SS4Rec,
     return avg_loss, rmse, mae
 
 
+def load_config_with_fallback(config_path: str, args: argparse.Namespace) -> argparse.Namespace:
+    """
+    Load YAML config and merge with command line arguments
+    CRITICAL FIX: Properly map nested YAML structure to flat arguments
+    """
+    if not os.path.exists(config_path):
+        logging.warning(f"Config file {config_path} not found, using command line args only")
+        return args
+    
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # Map nested config to flat arguments (prioritize command line args)
+        training_config = config.get('training', {})
+        model_config = config.get('model', {})
+        data_config = config.get('data', {})
+        wandb_config = config.get('wandb', {})
+        
+        # Update args only if not explicitly set via command line
+        # (argparse defaults vs explicit values can be distinguished by checking against defaults)
+        if args.batch_size == 1024:  # default value
+            args.batch_size = training_config.get('batch_size', args.batch_size)
+        
+        if args.epochs == 100:  # default value
+            args.epochs = training_config.get('num_epochs', args.epochs)
+        
+        if args.lr == 0.001:  # default value
+            args.lr = training_config.get('learning_rate', args.lr)
+            
+        if args.max_seq_len == 200:  # default value
+            args.max_seq_len = model_config.get('max_seq_len', args.max_seq_len)
+            
+        if args.early_stopping == 10:  # default value
+            args.early_stopping = training_config.get('early_stopping', args.early_stopping)
+            
+        if args.seed == 42:  # default value
+            args.seed = data_config.get('seed', args.seed)
+            
+        if args.wandb_project == 'movielens-ss4rec':  # default value
+            args.wandb_project = wandb_config.get('project', args.wandb_project)
+        
+        # Store full config for model initialization
+        args.full_config = config
+        
+        logging.info(f"✅ Loaded config from {config_path}")
+        logging.info(f"📊 Training: {args.epochs} epochs, batch_size={args.batch_size}, lr={args.lr}")
+        
+    except Exception as e:
+        logging.error(f"❌ Failed to load config {config_path}: {e}")
+        logging.info("🔄 Continuing with command line arguments only")
+    
+    return args
+
+
 def main():
     parser = argparse.ArgumentParser(description='Train SS4Rec model')
     parser.add_argument('--config', type=str, default='configs/ss4rec.yaml',
@@ -335,6 +391,9 @@ def main():
                        help='Enable comprehensive debug logging for NaN detection')
     
     args = parser.parse_args()
+    
+    # CRITICAL FIX: Load and merge config with command line arguments
+    args = load_config_with_fallback(args.config, args)
     
     # Set random seeds
     torch.manual_seed(args.seed)
@@ -466,80 +525,133 @@ def main():
         
         logging.info("Starting training...")
         
-        for epoch in range(1, args.epochs + 1):
-            epoch_start_time = time.time()
-            logging.info(f"Starting Epoch {epoch}/{args.epochs} - SS4Rec Training")
-            
-            # Log epoch start with consistent step counter
-            epoch_start_step = (epoch - 1) * len(train_loader) + 1
-            wandb.log({
-                'epoch_start': epoch,
-                'total_epochs': args.epochs
-            }, step=epoch_start_step)
-            
-            # Train
-            train_loss = train_epoch(
-                model, train_loader, optimizer, criterion, device, epoch
-            )
-            
-            # Validate
-            val_loss, val_rmse, val_mae = evaluate_model(
-                model, val_loader, criterion, device
-            )
-            
-            # Update learning rate
-            scheduler.step(val_rmse)
-            
-            # Log metrics
-            epoch_time = time.time() - epoch_start_time
-            current_lr = optimizer.param_groups[0]['lr']
-            
-            logging.info(
-                f"Epoch {epoch}/{args.epochs} - "
-                f"Train Loss: {train_loss:.6f}, "
-                f"Val Loss: {val_loss:.6f}, "
-                f"Val RMSE: {val_rmse:.6f}, "
-                f"Val MAE: {val_mae:.6f}, "
-                f"LR: {current_lr:.8f}, "
-                f"Time: {epoch_time:.1f}s"
-            )
-            
-            # W&B epoch metrics logging - use same step counter as batches
-            epoch_step = epoch * len(train_loader)  # End of epoch step
-            wandb.log({
-                'train_loss': train_loss,
-                'val_loss': val_loss, 
-                'val_rmse': val_rmse,
-                'val_mae': val_mae,
-                'learning_rate': current_lr,
-                'epoch_time': epoch_time,
-                'epoch_progress_pct': epoch / args.epochs * 100
-            }, step=epoch_step)
-            
-            # Save best model
-            if val_rmse < best_val_rmse:
-                best_val_rmse = val_rmse
-                best_epoch = epoch
-                patience_counter = 0
+        # CRITICAL FIX: Add comprehensive error handling for training loop
+        try:
+            for epoch in range(1, args.epochs + 1):
+                epoch_start_time = time.time()
+                logging.info(f"Starting Epoch {epoch}/{args.epochs} - SS4Rec Training")
                 
-                # Save model
-                torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'val_rmse': val_rmse,
-                    'config': config
-                }, output_dir / 'best_model.pth')
-                
-                logging.info(f"New best model saved! Val RMSE: {val_rmse:.6f}")
-                
-            else:
-                patience_counter += 1
-                
-            # Early stopping
-            if patience_counter >= args.early_stopping:
-                logging.info(f"Early stopping triggered after {patience_counter} epochs without improvement")
-                break
+                try:
+                    # Log epoch start with consistent step counter
+                    epoch_start_step = (epoch - 1) * len(train_loader) + 1
+                    wandb.log({
+                        'epoch_start': epoch,
+                        'total_epochs': args.epochs
+                    }, step=epoch_start_step)
+                    
+                    # Train
+                    train_loss = train_epoch(
+                        model, train_loader, optimizer, criterion, device, epoch
+                    )
+                    
+                    if torch.isnan(torch.tensor(train_loss)):
+                        raise ValueError(f"🚨 NaN detected in training loss at epoch {epoch}")
+                    
+                    # Validate
+                    val_loss, val_rmse, val_mae = evaluate_model(
+                        model, val_loader, criterion, device
+                    )
+                    
+                    if torch.isnan(torch.tensor([val_loss, val_rmse, val_mae])).any():
+                        raise ValueError(f"🚨 NaN detected in validation metrics at epoch {epoch}")
+                    
+                    # Update learning rate
+                    scheduler.step(val_rmse)
+                    
+                    # Log metrics
+                    epoch_time = time.time() - epoch_start_time
+                    current_lr = optimizer.param_groups[0]['lr']
+                    
+                    logging.info(
+                        f"Epoch {epoch}/{args.epochs} - "
+                        f"Train Loss: {train_loss:.6f}, "
+                        f"Val Loss: {val_loss:.6f}, "
+                        f"Val RMSE: {val_rmse:.6f}, "
+                        f"Val MAE: {val_mae:.6f}, "
+                        f"LR: {current_lr:.8f}, "
+                        f"Time: {epoch_time:.1f}s"
+                    )
+                    
+                    # W&B epoch metrics logging - use same step counter as batches
+                    epoch_step = epoch * len(train_loader)  # End of epoch step
+                    wandb.log({
+                        'train_loss': train_loss,
+                        'val_loss': val_loss, 
+                        'val_rmse': val_rmse,
+                        'val_mae': val_mae,
+                        'learning_rate': current_lr,
+                        'epoch_time': epoch_time,
+                        'epoch_progress_pct': epoch / args.epochs * 100
+                    }, step=epoch_step)
+                    
+                    # Save best model
+                    if val_rmse < best_val_rmse:
+                        best_val_rmse = val_rmse
+                        best_epoch = epoch
+                        patience_counter = 0
+                        
+                        # Save model
+                        torch.save({
+                            'epoch': epoch,
+                            'model_state_dict': model.state_dict(),
+                            'optimizer_state_dict': optimizer.state_dict(),
+                            'val_rmse': val_rmse,
+                            'config': getattr(args, 'full_config', {})
+                        }, output_dir / 'best_model.pth')
+                        
+                        logging.info(f"New best model saved! Val RMSE: {val_rmse:.6f}")
+                        
+                    else:
+                        patience_counter += 1
+                        
+                    # Early stopping
+                    if patience_counter >= args.early_stopping:
+                        logging.info(f"Early stopping triggered after {patience_counter} epochs without improvement")
+                        break
+                        
+                except Exception as epoch_error:
+                    logging.error(f"❌ Error in epoch {epoch}: {epoch_error}")
+                    logging.error(f"📊 Last train_loss: {train_loss if 'train_loss' in locals() else 'N/A'}")
+                    logging.error(f"📊 Last val metrics: loss={val_loss if 'val_loss' in locals() else 'N/A'}, rmse={val_rmse if 'val_rmse' in locals() else 'N/A'}")
+                    
+                    # Save debug information
+                    debug_file = output_dir / f"debug_epoch_{epoch}_error.pt"
+                    torch.save({
+                        'model_state': model.state_dict(),
+                        'optimizer_state': optimizer.state_dict(),
+                        'epoch': epoch,
+                        'error': str(epoch_error),
+                        'train_loss': train_loss if 'train_loss' in locals() else None,
+                        'val_metrics': {'loss': val_loss, 'rmse': val_rmse, 'mae': val_mae} if 'val_loss' in locals() else None
+                    }, debug_file)
+                    logging.info(f"💾 Debug information saved to {debug_file}")
+                    
+                    # Log error to W&B
+                    wandb.log({'training_error': str(epoch_error), 'failed_epoch': epoch})
+                    
+                    # Re-raise to stop training
+                    raise epoch_error
+                    
+        except Exception as training_error:
+            logging.error(f"🚨 CRITICAL: Training failed with error: {training_error}")
+            logging.error(f"📍 Full stack trace:", exc_info=True)
+            
+            # Save final debug state
+            final_debug_file = output_dir / "final_training_error_debug.pt"
+            torch.save({
+                'model_state': model.state_dict(),
+                'optimizer_state': optimizer.state_dict(),
+                'error': str(training_error),
+                'best_val_rmse': best_val_rmse,
+                'best_epoch': best_epoch
+            }, final_debug_file)
+            logging.info(f"💾 Final debug state saved to {final_debug_file}")
+            
+            # Log critical error to W&B
+            wandb.log({'critical_training_error': str(training_error), 'training_failed': True})
+            
+            # Exit with error code
+            raise training_error
         
         # Final evaluation
         logging.info("Loading best model for final evaluation...")

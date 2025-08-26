@@ -482,12 +482,21 @@ else
 fi
 log "================================"
 
-# Build training command - use auto_train for Discord notifications
-if [ "$DEBUG_LOGGING" = true ]; then
-    # Prepend debug logging setup to training command
-    TRAIN_CMD="python -c 'from debug_logging_config import setup_comprehensive_debug_logging; setup_comprehensive_debug_logging()' && python auto_train_ss4rec.py --model $MODEL_TYPE --config $CONFIG_FILE"
+# Build training command - bypass broken intermediate layers for ss4rec
+if [ "$MODEL_TYPE" = "ss4rec" ]; then
+    # CRITICAL FIX: Direct call to train_ss4rec.py to bypass broken execution chain
+    if [ "$DEBUG_LOGGING" = true ]; then
+        TRAIN_CMD="python -c 'from debug_logging_config import setup_comprehensive_debug_logging; setup_comprehensive_debug_logging()' && python training/train_ss4rec.py --config $CONFIG_FILE"
+    else
+        TRAIN_CMD="python training/train_ss4rec.py --config $CONFIG_FILE"
+    fi
 else
-    TRAIN_CMD="python auto_train_ss4rec.py --model $MODEL_TYPE --config $CONFIG_FILE"
+    # Keep original execution chain for other models
+    if [ "$DEBUG_LOGGING" = true ]; then
+        TRAIN_CMD="python -c 'from debug_logging_config import setup_comprehensive_debug_logging; setup_comprehensive_debug_logging()' && python auto_train_ss4rec.py --model $MODEL_TYPE --config $CONFIG_FILE"
+    else
+        TRAIN_CMD="python auto_train_ss4rec.py --model $MODEL_TYPE --config $CONFIG_FILE"
+    fi
 fi
 
 if [ "$WANDB_ENABLED" = false ]; then

@@ -190,12 +190,22 @@ class SS4Rec(nn.Module):
             batch_size, seq_len = timestamps.shape if timestamps is not None else (1, self.max_seq_len)
             return torch.ones(batch_size, seq_len - 1, device=self.item_embedding.weight.device) * 0.1
         
+        # CRITICAL FIX: Handle zero-padded timestamps properly
+        # Create mask for valid timestamps (non-zero)
+        valid_timestamp_mask = timestamps > 0  # [batch_size, seq_len]
+        
         # Fast computation without excessive logging
         time_diffs = timestamps[:, 1:] - timestamps[:, :-1]
         time_intervals = time_diffs.float() / 86400.0  # Convert to days
         
-        # Fix negative/zero intervals efficiently 
-        time_intervals = torch.where(time_intervals <= 0, 0.01, time_intervals)
+        # Apply masking: only compute intervals where both timestamps are valid
+        valid_interval_mask = valid_timestamp_mask[:, :-1] & valid_timestamp_mask[:, 1:]
+        
+        # For invalid intervals (padding), use small default value
+        time_intervals = torch.where(valid_interval_mask, time_intervals, 0.01)
+        
+        # Fix negative/zero intervals efficiently (only for valid intervals)
+        time_intervals = torch.where((time_intervals <= 0) & valid_interval_mask, 0.01, time_intervals)
         
         # Clip extreme values silently (only warn if many extremes)
         extreme_mask = (time_intervals > 365.0)
