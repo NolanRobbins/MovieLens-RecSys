@@ -19,8 +19,8 @@ model:
   rating_prediction: true   # Enable rating prediction mode
     
 training:
-  batch_size: 1024          # PROGRESSIVE: 4x increase from stable baseline (256→1024)
-  num_epochs: 10            # Full training epochs
+  batch_size: 1536          # OPTIMIZED: 6x increase for 4-8 hour target training
+  num_epochs: 50            # Production epochs with early stopping
   learning_rate: 0.001      # AdamW learning rate
   weight_decay: 0.00001     # L2 regularization
   early_stopping: 5         # Early stopping patience
@@ -73,11 +73,12 @@ logging:
   save_model_every: 1       # Save checkpoint every epoch
 
 # Expected performance with this config:
-# - Batch size: 1024 (4x increase from stable 256)
-# - Sequence length: 100 (2x increase from stable 50)  
+# - Batch size: 1536 (6x increase from stable 256) 
+# - Sequence length: 100 (2x increase from stable 50)
 # - Dataset: ~850K samples (controlled by max_sequences_per_user=5)
-# - Batches per epoch: ~830 (850K / 1024)
-# - Expected GPU utilization: 75-90% (major improvement)
-# - Expected epoch time: 10-15 minutes (vs 276 hours original)
+# - Batches per epoch: ~555 (850K / 1536)
+# - Expected GPU utilization: 80-90% (optimal A6000 usage)
+# - Expected epoch time: 6-8 minutes (1536 batch size)
+# - Total training time: 4-7 hours (50 epochs + early stopping)
 # - Mixed precision: DISABLED (prevents NaN crashes)
 # - Training stability: HIGH (FP32 + tight gradient clipping)
