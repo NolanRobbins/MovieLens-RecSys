@@ -218,6 +218,7 @@ def train_epoch(model: SS4Rec,
                criterion: nn.Module,
                device: torch.device,
                epoch: int,
+               scaler = None,
                log_interval: int = 100) -> float:
     """Train for one epoch"""
     model.train()
@@ -235,16 +236,18 @@ def train_epoch(model: SS4Rec,
         # Zero gradients
         optimizer.zero_grad()
         
-        # Forward pass
-        predictions = model(
-            users=user_ids,
-            item_seq=item_seq,
-            target_items=target_items,
-            timestamps=timestamp_seq
-        )
-        
-        # Compute loss
-        loss = criterion(predictions, target_ratings)
+        # Mixed precision forward pass
+        with torch.cuda.amp.autocast(enabled=scaler is not None):
+            # Forward pass
+            predictions = model(
+                users=user_ids,
+                item_seq=item_seq,
+                target_items=target_items,
+                timestamps=timestamp_seq
+            )
+            
+            # Compute loss
+            loss = criterion(predictions, target_ratings)
         
         # Debug nan loss
         if torch.isnan(loss):
@@ -254,14 +257,17 @@ def train_epoch(model: SS4Rec,
             print(f"Model has nan params: {any(torch.isnan(p).any() for p in model.parameters())}")
             raise ValueError("NaN loss - stopping training")
         
-        # Backward pass
-        loss.backward()
-        
-        # Gradient clipping for stability (more aggressive)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
-        
-        # Update parameters
-        optimizer.step()
+        # Backward pass with mixed precision
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)  # Unscale for gradient clipping
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+            optimizer.step()
         
         total_loss += loss.item()
         num_batches += 1
@@ -376,6 +382,9 @@ def load_config_with_fallback(config_path: str, args: argparse.Namespace) -> arg
         
         # Add max_sequences_per_user parameter  
         args.max_sequences_per_user = data_config.get('max_sequences_per_user', 10)
+        
+        # Add mixed precision support
+        args.mixed_precision = training_config.get('mixed_precision', False)
         
         # Store full config for model initialization
         args.full_config = config
@@ -539,6 +548,11 @@ def main():
         criterion = nn.MSELoss()
         optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-5)
         
+        # Mixed precision scaler for A6000 optimization
+        scaler = torch.cuda.amp.GradScaler() if getattr(args, 'mixed_precision', False) else None
+        if scaler:
+            logging.info("🚀 Mixed precision training enabled for A6000 optimization")
+        
         # Learning rate scheduler
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='min', factor=0.5, patience=5
@@ -567,7 +581,7 @@ def main():
                     
                     # Train
                     train_loss = train_epoch(
-                        model, train_loader, optimizer, criterion, device, epoch
+                        model, train_loader, optimizer, criterion, device, epoch, scaler
                     )
                     
                     if torch.isnan(torch.tensor(train_loss)):
