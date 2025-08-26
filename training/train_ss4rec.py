@@ -51,6 +51,7 @@ class MovieLensSequentialDataset(Dataset):
                  timestamp_col: str = 'timestamp',
                  max_seq_len: int = 200,
                  min_seq_len: int = 5,
+                 max_sequences_per_user: int = 10,
                  mode: str = 'train'):
         """
         Initialize sequential dataset
@@ -63,6 +64,7 @@ class MovieLensSequentialDataset(Dataset):
             timestamp_col: Timestamp column name
             max_seq_len: Maximum sequence length
             min_seq_len: Minimum sequence length
+            max_sequences_per_user: Maximum sequences per user (prevents dataset explosion)
             mode: Dataset mode ('train', 'val', 'test')
         """
         self.data = data.copy()
@@ -72,6 +74,7 @@ class MovieLensSequentialDataset(Dataset):
         self.timestamp_col = timestamp_col
         self.max_seq_len = max_seq_len
         self.min_seq_len = min_seq_len
+        self.max_sequences_per_user = max_sequences_per_user
         self.mode = mode
         
         # Sort by user and timestamp
@@ -97,8 +100,26 @@ class MovieLensSequentialDataset(Dataset):
             ratings = user_data[self.rating_col].values
             timestamps = user_data[self.timestamp_col].values
             
-            # Create training sequences with sliding window
-            for i in range(self.min_seq_len, len(items) + 1):
+            # CRITICAL FIX: Limit sequences per user to prevent dataset explosion
+            # Create training sequences with controlled sampling
+            total_possible_sequences = len(items) - self.min_seq_len + 1
+            
+            if total_possible_sequences <= self.max_sequences_per_user:
+                # Use all possible sequences if under limit
+                sequence_indices = list(range(self.min_seq_len, len(items) + 1))
+            else:
+                # Sample evenly distributed sequences across user's history
+                step = total_possible_sequences // self.max_sequences_per_user
+                sequence_indices = []
+                for seq_idx in range(self.max_sequences_per_user):
+                    idx = self.min_seq_len + (seq_idx * step)
+                    sequence_indices.append(min(idx, len(items)))
+                
+                # Always include the final sequence (most recent)
+                if len(items) not in sequence_indices:
+                    sequence_indices[-1] = len(items)
+            
+            for i in sequence_indices:
                 if i > self.max_seq_len:
                     # Use last max_seq_len items
                     start_idx = i - self.max_seq_len
@@ -161,17 +182,18 @@ def create_data_loaders(train_data: pd.DataFrame,
                        test_data: pd.DataFrame,
                        batch_size: int = 1024,
                        max_seq_len: int = 200,
+                       max_sequences_per_user: int = 10,
                        num_workers: int = 4) -> Tuple[DataLoader, DataLoader, DataLoader]:
     """Create data loaders for SS4Rec training"""
     
     train_dataset = MovieLensSequentialDataset(
-        train_data, max_seq_len=max_seq_len, mode='train'
+        train_data, max_seq_len=max_seq_len, max_sequences_per_user=max_sequences_per_user, mode='train'
     )
     val_dataset = MovieLensSequentialDataset(
-        val_data, max_seq_len=max_seq_len, mode='val'
+        val_data, max_seq_len=max_seq_len, max_sequences_per_user=max_sequences_per_user, mode='val'
     )
     test_dataset = MovieLensSequentialDataset(
-        test_data, max_seq_len=max_seq_len, mode='test'
+        test_data, max_seq_len=max_seq_len, max_sequences_per_user=max_sequences_per_user, mode='test'
     )
     
     train_loader = DataLoader(
@@ -352,6 +374,9 @@ def load_config_with_fallback(config_path: str, args: argparse.Namespace) -> arg
         if args.wandb_project == 'movielens-ss4rec':  # default value
             args.wandb_project = wandb_config.get('project', args.wandb_project)
         
+        # Add max_sequences_per_user parameter  
+        args.max_sequences_per_user = data_config.get('max_sequences_per_user', 10)
+        
         # Store full config for model initialization
         args.full_config = config
         
@@ -482,7 +507,8 @@ def main():
         train_loader, val_loader, test_loader = create_data_loaders(
             train_data, val_data, test_data,
             batch_size=args.batch_size,
-            max_seq_len=args.max_seq_len
+            max_seq_len=args.max_seq_len,
+            max_sequences_per_user=getattr(args, 'max_sequences_per_user', 10)
         )
         
         # Create model
