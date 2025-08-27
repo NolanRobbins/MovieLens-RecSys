@@ -547,6 +547,7 @@ def main():
     logging.info(f"Using device: {device}")
     
     # Create output directory
+    global output_directory  # Declare global before assignment
     output_dir = Path(args.output_dir)
     output_directory = output_dir  # Set global for signal handler
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -610,7 +611,7 @@ def main():
         logging.info("⚠️ Discord webhook not configured - notifications disabled")
     
     # Setup signal handlers for graceful shutdown
-    global discord_webhook, output_directory
+    global discord_webhook
     discord_webhook = webhook_url
     setup_signal_handlers()
     logging.info("🛡️ Signal handlers configured for graceful shutdown")
