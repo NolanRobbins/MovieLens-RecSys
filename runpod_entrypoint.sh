@@ -516,20 +516,55 @@ else
 fi
 log "================================"
 
-# Execute training with error handling
-if eval "$TRAIN_CMD"; then
-    log "================================"
-    log "🎉 Training completed successfully!"
-    log "📅 Completed: $(date)"
+# Create training log file with timestamp
+TRAINING_LOG="training_$(date +%Y%m%d_%H%M%S).log"
+log "📝 Training output will be saved to: $TRAINING_LOG"
+log "🔄 Training will run in background - safe to close terminal"
+log "💡 Monitor progress via: tail -f $TRAINING_LOG"
+log "📊 Check W&B dashboard for real-time metrics"
+log "📱 Discord will notify when training completes"
+log "================================"
+
+# Execute training in background with comprehensive logging
+log "🚀 Starting background training process..."
+nohup bash -c "$TRAIN_CMD" > "$TRAINING_LOG" 2>&1 &
+TRAIN_PID=$!
+
+log "✅ Training started in background with PID: $TRAIN_PID"
+log "📝 Training log: $TRAINING_LOG"
+log "🔍 Monitor with: tail -f $TRAINING_LOG"
+log "🛑 Stop with: kill $TRAIN_PID"
+log "================================"
+
+# Save PID for easy access
+echo $TRAIN_PID > training.pid
+log "💾 Process ID saved to training.pid"
+
+# Wait a moment to check if process started successfully
+sleep 5
+if kill -0 $TRAIN_PID 2>/dev/null; then
+    log "✅ Training process running successfully (PID: $TRAIN_PID)"
+    log "🔄 Safe to close terminal - training will continue"
+    log "📱 Discord will notify when complete"
     
-    # Post-training file organization and download guidance
+    # Show recent log output to confirm it's working
     log "================================"
-    log "📁 POST-TRAINING: File Download Guide"
+    log "🔍 RECENT TRAINING OUTPUT:"
     log "================================"
-    
-    # Create download summary
-    DOWNLOAD_SUMMARY="training_download_guide.txt"
-    cat > "$DOWNLOAD_SUMMARY" << EOF
+    tail -10 "$TRAINING_LOG" 2>/dev/null || log "   (Log file still initializing...)"
+    log "================================"
+    log "✅ SETUP COMPLETE - Training running in background"
+    log "💡 Use 'tail -f $TRAINING_LOG' to monitor progress"
+    log "🛑 Use 'kill $TRAIN_PID' to stop training"
+else
+    log "❌ Training process failed to start"
+    log "📝 Check log for details: cat $TRAINING_LOG"
+    exit 1
+fi
+
+# Create download guide template for when training completes
+DOWNLOAD_SUMMARY="training_download_guide.txt"
+cat > "$DOWNLOAD_SUMMARY" << EOF
 🎯 ESSENTIAL FILES TO DOWNLOAD FROM RUNPOD
 ==========================================
 
@@ -615,20 +650,19 @@ echo "🚀 Ready to commit training metadata. Run:"
 echo "git commit -m 'Training session complete - $(date)'"
 echo "git push origin main"
 EOF
-    chmod +x commit_training_metadata.sh
-    log "📄 Commit script created: ./commit_training_metadata.sh"
-    
-    log "================================"
-    log "🎯 IMMEDIATE NEXT STEPS:"
-    log "1. 📥 Download files listed in $DOWNLOAD_SUMMARY via Jupyter Lab"
-    log "2. 🔧 Configure git identity if needed"
-    log "3. 📤 Run ./commit_training_metadata.sh to push metadata"
-    log "4. 🛑 Terminate RunPod to save costs"
-    log "5. 📊 Analyze results and plan next training phase"
-    log "================================"
-    
-else
-    error_exit "Training failed"
-fi
+chmod +x commit_training_metadata.sh
+log "📄 Download guide created: $DOWNLOAD_SUMMARY"
+log "📄 Commit script created: ./commit_training_metadata.sh"
 
-log "🏁 RunPod training session complete"
+log "================================"
+log "🎯 BACKGROUND TRAINING ACTIVE"
+log "================================"
+log "✅ Training is now running in background (PID: $TRAIN_PID)"
+log "🔄 Safe to close this terminal - training will continue"
+log "📝 Monitor progress: tail -f $TRAINING_LOG"
+log "📊 Check W&B dashboard for real-time metrics"
+log "📱 Discord will notify when training completes"
+log "🛑 Stop training: kill $TRAIN_PID"
+log "📁 Download guide ready: $DOWNLOAD_SUMMARY"
+log "================================"
+log "🏁 RunPod setup complete - training continues in background"

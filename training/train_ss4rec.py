@@ -15,6 +15,8 @@ import json
 import pickle
 import subprocess
 import requests
+import signal
+import atexit
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional, Any
 from pathlib import Path
@@ -32,6 +34,15 @@ import yaml
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
+
+# Global variables for signal handling
+training_interrupted = False
+current_model = None
+current_optimizer = None
+current_epoch = 0
+current_best_rmse = float('inf')
+output_directory = None
+discord_webhook = None
 
 
 def send_discord_notification(message: str, webhook_url: str, color: int = 5763719) -> bool:
@@ -51,6 +62,66 @@ def send_discord_notification(message: str, webhook_url: str, color: int = 57637
     except Exception as e:
         logging.warning(f"Discord notification failed: {e}")
         return False
+
+
+def handle_training_interruption(signum, frame):
+    """Handle training interruption gracefully with Discord notification"""
+    global training_interrupted, current_model, current_optimizer, current_epoch
+    global current_best_rmse, output_directory, discord_webhook
+    
+    training_interrupted = True
+    signal_name = signal.Signals(signum).name
+    
+    logging.warning(f"🛑 Training interrupted by signal {signal_name} ({signum})")
+    
+    # Save current state if possible
+    if current_model is not None and output_directory is not None:
+        try:
+            interrupt_file = output_directory / f'interrupted_epoch_{current_epoch}.pth'
+            torch.save({
+                'epoch': current_epoch,
+                'model_state_dict': current_model.state_dict(),
+                'optimizer_state_dict': current_optimizer.state_dict() if current_optimizer else None,
+                'best_rmse': current_best_rmse,
+                'interrupted_by': signal_name,
+                'interrupted_at': datetime.utcnow().isoformat()
+            }, interrupt_file)
+            logging.info(f"💾 Interrupted state saved to: {interrupt_file}")
+            
+            # Send Discord notification about interruption
+            if discord_webhook:
+                duration_mins = time.time() - getattr(handle_training_interruption, 'start_time', time.time())
+                duration_mins = duration_mins / 60
+                
+                interrupt_message = f"""
+🛑 **Training Interrupted - SS4Rec**
+
+**Status**: Stopped by signal {signal_name}
+**Epoch**: {current_epoch} (in progress)
+**Best RMSE**: {current_best_rmse:.6f}
+**Duration**: {duration_mins:.1f} minutes
+**Saved**: {interrupt_file.name}
+
+🔄 **To Resume**: Use `--resume {interrupt_file}`
+📱 **RunPod**: Process can be safely restarted
+                """.strip()
+                
+                send_discord_notification(interrupt_message, discord_webhook, color=16776960)  # Yellow for warning
+                
+        except Exception as e:
+            logging.error(f"❌ Failed to save interrupted state: {e}")
+    
+    # Exit gracefully
+    logging.info("🛑 Training stopped. Use --resume to continue from checkpoint.")
+    sys.exit(1)
+
+
+def setup_signal_handlers():
+    """Setup signal handlers for graceful shutdown"""
+    signal.signal(signal.SIGINT, handle_training_interruption)   # Ctrl+C
+    signal.signal(signal.SIGTERM, handle_training_interruption)  # Kill command
+    # Store start time for duration calculation
+    handle_training_interruption.start_time = time.time()
 
 
 def get_system_info() -> str:
@@ -453,6 +524,10 @@ def main():
                        help='Early stopping patience')
     parser.add_argument('--debug', action='store_true',
                        help='Enable comprehensive debug logging for NaN detection')
+    parser.add_argument('--resume', type=str, default=None,
+                       help='Resume training from checkpoint path (e.g., results/ss4rec/best_model.pth)')
+    parser.add_argument('--save-every', type=int, default=10,
+                       help='Save checkpoint every N epochs (0 = only save best)')
     
     args = parser.parse_args()
     
@@ -473,6 +548,7 @@ def main():
     
     # Create output directory
     output_dir = Path(args.output_dir)
+    output_directory = output_dir  # Set global for signal handler
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Setup logging
@@ -532,6 +608,12 @@ def main():
         logging.info("📱 Discord start notification sent")
     else:
         logging.info("⚠️ Discord webhook not configured - notifications disabled")
+    
+    # Setup signal handlers for graceful shutdown
+    global discord_webhook, output_directory
+    discord_webhook = webhook_url
+    setup_signal_handlers()
+    logging.info("🛡️ Signal handlers configured for graceful shutdown")
     
     training_start_time = time.time()
     
@@ -593,6 +675,10 @@ def main():
         model = create_ss4rec_model(n_users, n_items, config)
         model = model.to(device)
         
+        # Set global variables for signal handler
+        global current_model, current_optimizer, current_best_rmse
+        current_model = model
+        
         # Count parameters
         total_params = sum(p.numel() for p in model.parameters())
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -602,6 +688,7 @@ def main():
         # Loss function and optimizer
         criterion = nn.MSELoss()
         optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-5)
+        current_optimizer = optimizer  # Set global for signal handler
         
         # Mixed precision scaler for A6000 optimization
         scaler = torch.cuda.amp.GradScaler() if getattr(args, 'mixed_precision', False) else None
@@ -615,14 +702,35 @@ def main():
         
         # Training loop
         best_val_rmse = float('inf')
+        current_best_rmse = float('inf')  # Initialize global
         best_epoch = 0
         patience_counter = 0
+        start_epoch = 1
         
-        logging.info("Starting training...")
+        # Resume from checkpoint if specified
+        if args.resume:
+            if os.path.exists(args.resume):
+                logging.info(f"🔄 Resuming training from checkpoint: {args.resume}")
+                checkpoint = torch.load(args.resume, map_location=device)
+                model.load_state_dict(checkpoint['model_state_dict'])
+                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                start_epoch = checkpoint['epoch'] + 1
+                best_val_rmse = checkpoint.get('val_rmse', float('inf'))
+                current_best_rmse = best_val_rmse  # Update global
+                best_epoch = checkpoint.get('epoch', 0)
+                logging.info(f"✅ Resumed from epoch {checkpoint['epoch']}, best RMSE: {best_val_rmse:.6f}")
+            else:
+                logging.warning(f"⚠️ Checkpoint file not found: {args.resume}. Starting from scratch.")
+        
+        logging.info(f"Starting training from epoch {start_epoch}...")
         
         # CRITICAL FIX: Add comprehensive error handling for training loop
         try:
-            for epoch in range(1, args.epochs + 1):
+            for epoch in range(start_epoch, args.epochs + 1):
+                # Update global epoch for signal handler
+                global current_epoch, current_best_rmse
+                current_epoch = epoch
+                
                 epoch_start_time = time.time()
                 logging.info(f"Starting Epoch {epoch}/{args.epochs} - SS4Rec Training")
                 
@@ -682,6 +790,7 @@ def main():
                     # Save best model
                     if val_rmse < best_val_rmse:
                         best_val_rmse = val_rmse
+                        current_best_rmse = val_rmse  # Update global for signal handler
                         best_epoch = epoch
                         patience_counter = 0
                         
@@ -698,6 +807,28 @@ def main():
                         
                     else:
                         patience_counter += 1
+                    
+                    # Save periodic checkpoint if enabled
+                    if args.save_every > 0 and epoch % args.save_every == 0:
+                        checkpoint_file = output_dir / f'checkpoint_epoch_{epoch}.pth'
+                        torch.save({
+                            'epoch': epoch,
+                            'model_state_dict': model.state_dict(),
+                            'optimizer_state_dict': optimizer.state_dict(),
+                            'val_rmse': val_rmse,
+                            'best_val_rmse': best_val_rmse,
+                            'best_epoch': best_epoch,
+                            'config': getattr(args, 'full_config', {})
+                        }, checkpoint_file)
+                        logging.info(f"📁 Checkpoint saved: {checkpoint_file}")
+                        
+                        # Keep only last 3 checkpoints to save space
+                        checkpoint_pattern = output_dir / 'checkpoint_epoch_*.pth'
+                        checkpoints = sorted(output_dir.glob('checkpoint_epoch_*.pth'))
+                        if len(checkpoints) > 3:
+                            for old_checkpoint in checkpoints[:-3]:
+                                old_checkpoint.unlink()
+                                logging.info(f"🗑️ Removed old checkpoint: {old_checkpoint}")
                         
                     # Early stopping
                     if patience_counter >= args.early_stopping:
