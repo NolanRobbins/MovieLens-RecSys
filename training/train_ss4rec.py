@@ -677,7 +677,7 @@ def main():
         model = model.to(device)
         
         # Set global variables for signal handler
-        global current_model, current_optimizer, current_best_rmse
+        global current_model, current_optimizer, current_best_rmse, current_epoch
         current_model = model
         
         # Count parameters
@@ -729,7 +729,6 @@ def main():
         try:
             for epoch in range(start_epoch, args.epochs + 1):
                 # Update global epoch for signal handler
-                global current_epoch, current_best_rmse
                 current_epoch = epoch
                 
                 epoch_start_time = time.time()
