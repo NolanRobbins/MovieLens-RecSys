@@ -19,7 +19,7 @@ model:
     
 training:
   batch_size: 2048          # CRITICAL: 8x increase to fully utilize A6000 48GB VRAM
-  num_epochs: 10            # Increased for better training (still reasonable time)
+  num_epochs: 100           # Full production training for RMSE < 0.70 target
   learning_rate: 0.001      # AdamW learning rate
   weight_decay: 0.00001     # L2 regularization
   early_stopping: 5         # Early stopping patience

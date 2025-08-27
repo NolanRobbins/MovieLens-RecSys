@@ -13,6 +13,8 @@ import argparse
 import time
 import json
 import pickle
+import subprocess
+import requests
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional, Any
 from pathlib import Path
@@ -30,6 +32,34 @@ import yaml
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
+
+
+def send_discord_notification(message: str, webhook_url: str, color: int = 5763719) -> bool:
+    """Send completion notification via Discord webhook"""
+    try:
+        payload = {
+            "embeds": [{
+                "title": "🎬 MovieLens RecSys Training Update",
+                "description": message,
+                "color": color,
+                "timestamp": datetime.utcnow().isoformat(),
+                "footer": {"text": "RunPod A6000 Auto-Trainer"}
+            }]
+        }
+        response = requests.post(webhook_url, json=payload, timeout=10)
+        return response.status_code == 204
+    except Exception as e:
+        logging.warning(f"Discord notification failed: {e}")
+        return False
+
+
+def get_system_info() -> str:
+    """Get system information"""
+    try:
+        hostname = subprocess.check_output(['hostname'], text=True).strip()
+        return f"Instance: {hostname} | GPU: NVIDIA A6000"
+    except:
+        return "Instance: unknown | GPU: NVIDIA A6000"
 
 from models.sota_2025.ss4rec import SS4Rec, create_ss4rec_model
 from src.data.feature_pipeline import EnhancedFeaturePipeline as FeaturePipeline
@@ -480,6 +510,31 @@ def main():
         tags=['ss4rec', 'sequential', 'movielens']
     )
     
+    # Send Discord start notification
+    webhook_url = os.environ.get('DISCORD_WEBHOOK_URL', '')
+    system_info = get_system_info()  # Get this regardless for potential use later
+    
+    if webhook_url:
+        start_message = f"""
+**🚀 Training Started - SS4REC**
+{'🔍 **DEBUG MODE ENABLED** - NaN detection active' if args.debug else ''}
+
+📊 **Model:** SS4Rec (SOTA 2025)
+⏰ **Started:** {datetime.now().strftime('%H:%M:%S UTC')}
+🖥️ **System:** {system_info}
+🎯 **Target:** Validation RMSE < 0.70 (SOTA)
+📊 **Epochs:** {args.epochs}
+
+⏳ Training in progress... notification will be sent when complete.
+        """.strip()
+        
+        send_discord_notification(start_message, webhook_url, color=3447003)  # Blue for start
+        logging.info("📱 Discord start notification sent")
+    else:
+        logging.info("⚠️ Discord webhook not configured - notifications disabled")
+    
+    training_start_time = time.time()
+    
     try:
         # Load data
         logging.info("Loading MovieLens data...")
@@ -738,8 +793,53 @@ def main():
         
         logging.info(f"Training completed! Results saved to {output_dir}")
         
+        # Send Discord success notification
+        if webhook_url:
+            duration_hours = (time.time() - training_start_time) / 3600
+            success_message = f"""
+**🎉 MovieLens RecSys - SS4Rec - Training Complete!**
+
+⏱️ **Duration:** {duration_hours:.1f} hours
+🎯 **Best RMSE:** {best_val_rmse:.6f} {'(✅ SOTA achieved!)' if best_val_rmse < 0.70 else '(Good progress)'}
+📊 **Test RMSE:** {test_rmse:.6f}
+📊 **Test MAE:** {test_mae:.6f}
+🖥️ **System:** {system_info}
+
+📊 **Check your W&B dashboard for detailed metrics**
+💾 **Results saved to:** `{output_dir}`
+
+✅ **Instance can now be safely terminated.**
+            """.strip()
+            
+            color = 5763719 if best_val_rmse < 0.70 else 16776960  # Green if SOTA, Yellow if good
+            send_discord_notification(success_message, webhook_url, color)
+            logging.info("📱 Discord success notification sent")
+        
     except Exception as e:
         logging.error(f"Training failed: {e}")
+        
+        # Send Discord failure notification
+        if webhook_url:
+            duration_hours = (time.time() - training_start_time) / 3600
+            failure_message = f"""
+**❌ MovieLens RecSys - SS4Rec - Training Failed**
+
+⏱️ **Duration:** {duration_hours:.1f} hours
+❌ **Error:** {str(e)[:200]}{'...' if len(str(e)) > 200 else ''}
+🖥️ **System:** {system_info}
+
+📝 **Check log file for details**
+🔧 **May need to restart training**
+
+Common fixes:
+• Check GPU memory: `nvidia-smi`
+• Verify data files: `ls data/processed/`
+• Check config file
+            """.strip()
+            
+            send_discord_notification(failure_message, webhook_url, color=15158332)  # Red for failure
+            logging.info("📱 Discord failure notification sent")
+        
         raise
     
     finally:
