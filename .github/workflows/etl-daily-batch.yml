@@ -1,0 +1,221 @@
+name: 📊 Daily ETL Batch Processing
+
+on:
+  # Run daily at 2 AM UTC (cron simulation)
+  schedule:
+    - cron: '0 2 * * *'
+  
+  # Manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      day_number:
+        description: 'Specific day to process (1-20)'
+        required: false
+        type: number
+      simulate_days:
+        description: 'Number of days to simulate (for testing)'
+        required: false
+        type: number
+        default: 1
+
+env:
+  PYTHON_VERSION: '3.9'
+  
+jobs:
+  etl-batch-processing:
+    name: 🚀 Process Daily Batch
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        lfs: true  # Pull Git LFS files (test data)
+    
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: 📦 Cache Dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: 🔧 Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas numpy pyyaml scipy scikit-learn
+        # Install additional dependencies if requirements.txt exists
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    
+    - name: 📁 Create ETL Directories
+      run: |
+        mkdir -p data/etl_batches/daily
+        mkdir -p data/etl_batches/cumulative
+        mkdir -p data/etl_metrics
+        mkdir -p etl/logs
+    
+    - name: 🔍 Pipeline Status Check
+      id: status_check
+      run: |
+        python etl/batch_etl_pipeline.py --status || echo "First run - no status available"
+        echo "status_checked=true" >> $GITHUB_OUTPUT
+    
+    - name: 🚀 Process Daily Batch
+      id: process_batch
+      run: |
+        if [[ "${{ github.event.inputs.day_number }}" ]]; then
+          # Manual day selection
+          echo "Processing day ${{ github.event.inputs.day_number }}"
+          python etl/batch_etl_pipeline.py --day ${{ github.event.inputs.day_number }}
+          echo "day_processed=${{ github.event.inputs.day_number }}" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.event.inputs.simulate_days }}" ]]; then
+          # Simulation mode
+          echo "Simulating ${{ github.event.inputs.simulate_days }} days"
+          python etl/batch_etl_pipeline.py --simulate ${{ github.event.inputs.simulate_days }}
+          echo "days_simulated=${{ github.event.inputs.simulate_days }}" >> $GITHUB_OUTPUT
+        else
+          # Normal daily processing
+          echo "Processing next day in sequence"
+          python etl/batch_etl_pipeline.py
+          echo "daily_processing=true" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: 📊 Collect Metrics
+      if: always()
+      run: |
+        # Show processing status
+        echo "=== ETL Pipeline Status ==="
+        python etl/batch_etl_pipeline.py --status
+        
+        # List generated files
+        echo "=== Generated Files ==="
+        ls -la data/etl_batches/daily/ || echo "No daily batches yet"
+        ls -la data/etl_metrics/ || echo "No metrics yet"
+        
+        # Show recent metrics if available
+        echo "=== Recent Metrics ==="
+        if [ -f data/etl_metrics/simulation_results.json ]; then
+          echo "Simulation Results:"
+          cat data/etl_metrics/simulation_results.json | head -20
+        fi
+    
+    - name: 📈 Upload ETL Artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: etl-batch-results-${{ github.run_number }}
+        path: |
+          data/etl_batches/
+          data/etl_metrics/
+          etl/logs/
+        retention-days: 30
+    
+    - name: 🚨 Check for Failures
+      if: always()
+      run: |
+        # Check if any critical errors occurred
+        if [ -f etl/logs/etl_pipeline.log ]; then
+          if grep -q "ERROR\|CRITICAL" etl/logs/etl_pipeline.log; then
+            echo "⚠️ Critical errors found in ETL pipeline"
+            echo "Recent errors:"
+            grep "ERROR\|CRITICAL" etl/logs/etl_pipeline.log | tail -5
+            exit 1
+          else
+            echo "✅ No critical errors found"
+          fi
+        fi
+    
+    - name: 📝 Create Issue on Failure
+      if: failure() && github.event_name == 'schedule'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const title = '🚨 Daily ETL Pipeline Failed';
+          const body = `
+          ## ETL Pipeline Failure Report
+          
+          **Run ID:** ${{ github.run_id }}
+          **Triggered:** ${{ github.event_name }}
+          **Time:** ${{ github.event.head_commit.timestamp }}
+          
+          ### Details
+          - **Workflow:** Daily ETL Batch Processing
+          - **Status:** Failed
+          - **Logs:** [View Run Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          
+          ### Action Required
+          Please investigate the ETL pipeline failure and resolve any issues.
+          
+          ### Troubleshooting
+          1. Check the pipeline logs for specific error messages
+          2. Verify data integrity and availability
+          3. Check system resource usage
+          4. Review recent code changes that might affect ETL processing
+          
+          **Auto-generated by GitHub Actions**
+          `;
+          
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['bug', 'etl-pipeline', 'automated']
+          });
+
+  # Job to run A/B testing after successful ETL processing
+  ab-testing:
+    name: 🧪 A/B Testing Evaluation
+    needs: etl-batch-processing
+    runs-on: ubuntu-latest
+    if: success()
+    
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+    
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: 📦 Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas numpy scikit-learn
+    
+    - name: 📥 Download ETL Results
+      uses: actions/download-artifact@v4
+      with:
+        name: etl-batch-results-${{ github.run_number }}
+        path: ./
+    
+    - name: 🧪 Run A/B Testing Integration
+      run: |
+        echo "=== A/B Testing Evaluation (Streamlit Integration) ==="
+        echo "Model A (NCF Baseline) vs Model B (SS4Rec)"
+        echo "Processing cumulative data for Streamlit dashboard..."
+        
+        # Run A/B testing framework designed for Streamlit
+        python etl/ab_testing/model_comparison.py --run
+        
+        echo "✅ A/B test results prepared for Streamlit app"
+        echo "🎯 Results available at: data/etl_metrics/latest_streamlit_ab_results.json"
+        
+        # Show summary for GitHub Actions logs
+        echo "=== A/B Testing Summary ==="
+        python etl/ab_testing/model_comparison.py --status
+    
+    - name: 📈 Upload A/B Test Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ab-test-results-${{ github.run_number }}
+        path: data/etl_metrics/ab_test_results.json
+        retention-days: 30

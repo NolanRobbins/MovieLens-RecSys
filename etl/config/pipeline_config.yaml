@@ -1,0 +1,81 @@
+# ETL Pipeline Configuration - Fixed 5% Daily Processing
+pipeline:
+  name: "movieLens_batch_etl"
+  version: "1.0.0"
+  
+  # Batch Processing Settings (Option 1: Fixed percentage of original)
+  batch:
+    total_days: 20
+    daily_percentage: 0.05  # 5% of ORIGINAL test data per day
+    processing_method: "fixed_percentage"  # vs "diminishing_percentage"
+    start_date: "2024-01-01"  # Simulation start date
+    
+  # Data Sources
+  data:
+    test_data_path: "data/processed/test_data.csv"
+    output_path: "data/etl_batches/"
+    metrics_path: "data/etl_metrics/"
+    processed_tracker: "data/etl_batches/processing_tracker.json"
+    
+  # Processing Settings  
+  processing:
+    chunk_size: 10000  # Process in chunks for memory efficiency
+    validate_schema: true
+    log_level: "INFO"
+    sort_by_timestamp: true  # Process chronologically
+    
+  # A/B Testing
+  ab_testing:
+    enabled: true
+    model_a: "ncf_baseline"  # Baseline model
+    model_b: "ss4rec"        # Your SS4Rec model
+    metrics:
+      - "rmse"
+      - "mae" 
+      - "precision_at_k"
+      - "recall_at_k"
+      - "ndcg_at_k"
+    k_values: [5, 10, 20]
+
+# Monitoring Configuration
+monitoring:
+  enabled: true
+  
+  # Data Quality Metrics
+  data_quality:
+    - "completeness"      # % of non-null values
+    - "uniqueness"        # % of unique user-item pairs  
+    - "validity"          # % of valid ratings (1-5)
+    - "consistency"       # Timestamp ordering
+    
+  # Performance Metrics
+  performance:
+    - "batch_processing_time"
+    - "memory_usage"
+    - "error_count"
+    - "throughput_records_per_second"
+    
+  # Business Metrics
+  business:
+    - "daily_active_users"
+    - "rating_distribution"
+    - "model_prediction_accuracy"
+    - "prediction_latency"
+
+# Alerting (Simple)
+alerting:
+  enabled: true
+  channels:
+    - type: "log"          # Log to file
+    - type: "github"       # GitHub Issues for failures
+  
+  thresholds:
+    data_quality_min: 0.95    # Alert if < 95% data quality
+    processing_time_max: 300   # Alert if batch takes > 5 minutes  
+    error_rate_max: 0.01       # Alert if > 1% error rate
+
+# GitHub Actions Integration
+github_actions:
+  schedule: "0 2 * * *"  # Run at 2 AM UTC daily
+  timeout_minutes: 30
+  artifact_retention_days: 30
