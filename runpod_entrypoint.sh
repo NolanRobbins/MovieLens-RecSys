@@ -253,6 +253,8 @@ fi
 if [ -z "$CONFIG_FILE" ]; then
     if [ "$MODEL_TYPE" = "ncf" ]; then
         CONFIG_FILE="configs/ncf_runpod.yaml"
+    elif [ "$MODEL_TYPE" = "ss4rec" ]; then
+        CONFIG_FILE="configs/ss4rec_a6000_optimized.yaml"
     else
         CONFIG_FILE="configs/${MODEL_TYPE}.yaml"
     fi
