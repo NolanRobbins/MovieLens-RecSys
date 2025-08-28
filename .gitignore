@@ -65,4 +65,8 @@ wandb/
 # Large data files (but allow processed data)
 data/raw/*.csv
 data/raw/*.tsv
-data/raw/*.parquetdata/processed/val_data.csv
+data/raw/*.parquet
+
+# RecBole format data files (large, can be regenerated)
+data/recbole_format/*.inter
+data/recbole_format/*.json

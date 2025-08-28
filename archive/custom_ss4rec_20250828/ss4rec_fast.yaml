@@ -1,0 +1,69 @@
+# SS4Rec Fast Training Configuration
+# Optimized for quick validation and debugging
+
+model:
+  name: "ss4rec"
+  type: "sequential_recommendation"
+  
+  # Reduced model parameters for faster training
+  d_model: 64               # Model dimension (embedding size)
+  n_layers: 2               # Number of SS blocks
+  d_state: 16               # State space dimension
+  d_conv: 4                 # Convolution dimension
+  expand: 2                 # Expansion factor for Mamba
+  dt_min: 0.001             # Minimum discretization step
+  dt_max: 0.1               # Maximum discretization step
+  dropout: 0.1              # Dropout probability
+  max_seq_len: 50           # REDUCED: Maximum sequence length
+  rating_prediction: true   # Enable rating prediction mode
+    
+training:
+  batch_size: 256           # REDUCED: Smaller batch size for stability
+  num_epochs: 5             # REDUCED: Quick validation run
+  learning_rate: 0.001      # AdamW learning rate
+  weight_decay: 0.00001     # L2 regularization
+  early_stopping: 3         # Early stopping patience
+  gradient_clip: 1.0        # Gradient clipping norm
+  
+  # Learning rate scheduler
+  scheduler:
+    type: "ReduceLROnPlateau"
+    mode: "min"
+    factor: 0.5
+    patience: 2
+    
+data:
+  # Sequential data parameters
+  min_seq_len: 5            # Minimum sequence length
+  max_sequences_per_user: 5 # CRITICAL: Limit sequences per user
+  test_split: 0.2           # Test set ratio
+  val_split: 0.1            # Validation set ratio
+  seed: 42                  # Random seed
+  
+paths:
+  data_dir: "data/processed"
+  model_dir: "results/ss4rec_fast"
+  log_dir: "logs"
+  cache_dir: "data/cache"
+
+# Weights & Biases configuration
+wandb:
+  project: "movielens-ss4rec-debug"
+  tags: 
+    - "ss4rec"
+    - "debug"
+    - "fast-training"
+  notes: "Fast SS4Rec validation run for debugging"
+
+# Hardware optimization
+hardware:
+  device: "auto"
+  num_workers: 4            # REDUCED: Fewer workers
+  pin_memory: true
+  persistent_workers: true
+
+# Logging configuration
+logging:
+  level: "INFO"
+  log_interval: 10          # Log every 10 batches
+  save_model_every: 1       # Save checkpoint every epoch

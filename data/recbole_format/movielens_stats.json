@@ -1,0 +1,11 @@
+{
+  "n_users": 170429,
+  "n_items": 48680,
+  "n_interactions": 20480050,
+  "sparsity": 0.9975314783116335,
+  "avg_seq_length": 120.16763578968369,
+  "timestamp_range": [
+    0.0,
+    20480129.0
+  ]
+}

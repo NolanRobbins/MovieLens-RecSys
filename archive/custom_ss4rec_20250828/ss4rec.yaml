@@ -1,0 +1,91 @@
+# SS4Rec Model Configuration
+# Based on paper: "SS4Rec: Continuous-Time Sequential Recommendation with State Space Models" (2025)
+
+model:
+  name: "ss4rec"
+  type: "sequential_recommendation"
+  
+  # Model architecture parameters (compatible with our implementation)
+  d_model: 64               # Model dimension (embedding size)
+  n_layers: 2               # Number of SS blocks
+  d_state: 16               # State space dimension
+  d_conv: 4                 # Convolution dimension
+  expand: 2                 # Expansion factor for Mamba
+  dt_min: 0.001             # Minimum discretization step
+  dt_max: 0.1               # Maximum discretization step
+  dropout: 0.1              # Dropout probability
+  max_seq_len: 200          # Maximum sequence length
+  rating_prediction: true   # Enable rating prediction mode
+    
+training:
+  batch_size: 1024          # Optimized for A6000 with sequential data
+  num_epochs: 100           # Maximum number of epochs
+  learning_rate: 0.001      # AdamW learning rate
+  weight_decay: 0.00001     # L2 regularization
+  early_stopping: 10        # Early stopping patience
+  gradient_clip: 1.0        # Gradient clipping norm
+  
+  # Learning rate scheduler
+  scheduler:
+    type: "ReduceLROnPlateau"
+    mode: "min"
+    factor: 0.5
+    patience: 5
+    
+  # Mixed precision (for A6000 efficiency)
+  mixed_precision: false    # Disabled for stability with SSMs
+    
+data:
+  # Sequential data parameters
+  min_seq_len: 5            # Minimum sequence length
+  test_split: 0.2           # Test set ratio
+  val_split: 0.1            # Validation set ratio
+  seed: 42                  # Random seed
+  
+  # Data preprocessing
+  normalize_ratings: false  # Keep original 1-5 scale
+  filter_users: true        # Filter users with < min_seq_len interactions
+  filter_items: true        # Filter cold-start items
+
+paths:
+  data_dir: "data/processed"
+  model_dir: "results/ss4rec"
+  log_dir: "logs"
+  cache_dir: "data/cache"
+
+# Weights & Biases configuration
+wandb:
+  project: "movielens-ss4rec"
+  entity: null              # Your W&B username (optional)
+  tags: 
+    - "ss4rec"
+    - "sequential"
+    - "movielens"
+    - "sota-2025"
+  notes: "SS4Rec sequential recommendation for MovieLens rating prediction"
+
+# Hardware optimization for RunPod A6000
+hardware:
+  device: "auto"            # Auto-detect CUDA/CPU
+  num_workers: 8            # DataLoader workers (A6000 optimized)
+  pin_memory: true          # GPU memory optimization
+  persistent_workers: true  # Keep workers alive between epochs
+
+# Evaluation configuration
+evaluation:
+  metrics:
+    - "rmse"                # Root Mean Square Error (primary)
+    - "mae"                 # Mean Absolute Error
+    - "r2"                  # R-squared
+  save_predictions: true    # Save test predictions
+  
+# Target performance (from paper adaptation)
+targets:
+  val_rmse: 0.70           # Target validation RMSE (SOTA goal)
+  baseline_rmse: 0.87      # Neural CF baseline to beat
+
+# Logging configuration
+logging:
+  level: "INFO"
+  log_interval: 100        # Log every N batches
+  save_model_every: 10     # Save checkpoint every N epochs

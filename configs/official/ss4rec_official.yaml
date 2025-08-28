@@ -1,0 +1,72 @@
+# Official SS4Rec Configuration
+# Based on: "SS4Rec: Continuous-Time Sequential Recommendation with State Space Models"
+# arXiv: https://arxiv.org/abs/2502.08132
+#
+# This configuration uses official RecBole framework with standard evaluation
+# protocols for sequential recommendation systems.
+
+# Model Configuration
+model: SS4RecOfficial
+dataset: movielens
+
+# SS4Rec Architecture Parameters (from paper)
+hidden_size: 64             # Model dimension
+n_layers: 2                 # Number of SS4Rec layers
+dropout_prob: 0.5           # Dropout probability
+loss_type: 'BPR'           # Bayesian Personalized Ranking for sequential recommendation
+
+# State Space Model Parameters
+d_state: 16                 # State dimension for SSMs
+d_conv: 4                   # Convolution dimension
+expand: 2                   # Expansion factor
+dt_min: 0.001              # Minimum discretization step
+dt_max: 0.1                # Maximum discretization step
+
+# Training Parameters (from paper)
+learning_rate: 0.001        # AdamW learning rate
+train_batch_size: 4096      # Batch size (paper specification)
+eval_batch_size: 4096       # Evaluation batch size
+epochs: 500                 # Maximum epochs
+stopping_step: 10           # Early stopping patience
+weight_decay: 0.0001        # L2 regularization
+
+# Evaluation Configuration
+metrics: ['Recall', 'MRR', 'NDCG', 'Hit']    # Standard RecSys metrics
+topk: [1, 5, 10, 20]                         # Top-K for evaluation
+valid_metric: 'NDCG@10'                      # Primary validation metric
+
+# Data Configuration
+MAX_ITEM_LIST_LENGTH: 50    # Maximum sequence length
+load_col:                   # Columns to load
+  inter: ['user_id', 'item_id', 'timestamp']
+  
+# Data splitting
+eval_args:
+  split: {'LS': 'valid_and_test'}   # Leave-one-out splitting
+  order: 'TO'                       # Time-ordered splitting
+  
+# Device and Reproducibility  
+device: cuda                # GPU training
+reproducibility: true       # Ensure reproducible results
+seed: 2023                 # Random seed
+
+# Optimization
+scheduler: 'StepLR'         # Learning rate scheduler
+step_size: 100              # LR scheduler step size
+gamma: 0.5                  # LR decay factor
+
+# Logging and Checkpointing
+log_wandb: false           # Disable W&B for RecBole (we'll add custom integration)
+save_dataset: false        # Don't save processed dataset
+save_dataloaders: false    # Don't save data loaders
+checkpoint_dir: 'results/official_ss4rec/checkpoints'
+
+# Performance Optimization
+num_workers: 4              # Data loading workers  
+pin_memory: true            # Pin memory for faster GPU transfer
+
+# Expected Performance Targets (from paper):
+# - HR@10: > 0.30
+# - NDCG@10: > 0.25  
+# - MRR@10: Competitive with SOTA baselines
+# - Training Time: 4-8 hours on A6000 GPU

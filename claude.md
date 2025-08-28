@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 MovieLens-RecSys is a state-of-the-art recommender system implementation comparing **SS4Rec** (Continuous-Time Sequential Recommendation with State Space Models, 2025 SOTA) against Neural Collaborative Filtering baseline. The project focuses on achieving best possible validation RMSE on MovieLens 25M dataset.
 
-**Primary Goal**: Achieve validation RMSE < 0.70 with SS4Rec (vs current NCF baseline ~0.87)
+**🚨 CRITICAL UPDATE (2025-08-28)**: Current SS4Rec implementation has **MAJOR DEVIATIONS** from SOTA paper causing gradient explosion. **OPTION A RESET** in progress to official RecBole implementation.
+
+**Updated Goal**: Faithful SS4Rec paper replication with HR@10 > 0.30, NDCG@10 > 0.25 vs NCF baseline using standard RecSys evaluation
 
 ## Common Development Commands
 
@@ -26,18 +28,17 @@ uv pip install -r requirements_ss4rec.txt
 
 ### Training Commands
 ```bash
-# Train Neural CF baseline (A6000 optimized)
+# ⚠️ DEPRECATED: Current SS4Rec training (gradient explosion issues)
+# python training/train_ss4rec.py --config configs/ss4rec.yaml
+
+# 🚀 NEW: Official SS4Rec implementation (Option A reset)
+# python training/official/train_ss4rec_official.py --config configs/official/ss4rec_official.yaml
+
+# Train Neural CF baseline (for comparison)
 python training/train_ncf.py --config configs/ncf_baseline.yaml
 
-# Train SS4Rec model (SOTA 2025)
-python training/train_ss4rec.py --config configs/ss4rec.yaml
-
-# Unified training with W&B and Discord notifications
-python auto_train_ss4rec.py --model ss4rec --config configs/ss4rec.yaml
-
-# RunPod training (automated setup)
-./runpod_entrypoint.sh --model ss4rec --debug    # Enable NaN detection
-./runpod_entrypoint.sh --model ss4rec --production  # Optimal performance
+# ⚠️ RunPod training currently disabled pending Option A implementation
+# ./runpod_entrypoint.sh --model ss4rec --debug
 ```
 
 ### Data Pipeline
@@ -103,13 +104,14 @@ uvicorn src.api.inference_api:app --reload --port 8000
 1. **Neural CF (Baseline)**: `models/baseline/neural_cf.py`
    - Matrix Factorization + MLP paths
    - Standard collaborative filtering approach
-   - Target: RMSE ~0.85-0.90
+   - Target: Competitive baseline for fair comparison
 
-2. **SS4Rec (SOTA 2025)**: `models/sota_2025/ss4rec.py` 
-   - State Space Models for sequential recommendation
-   - Continuous-time modeling with timestamps
-   - Components: Time-Aware SSM, Relation-Aware SSM, Continuous-Time Encoder
-   - Target: RMSE < 0.70 (25-30% improvement)
+2. **SS4Rec (SOTA 2025)**: 
+   - ⚠️ **DEPRECATED**: `models/sota_2025/ss4rec.py` (custom implementation - gradient explosion)
+   - 🚀 **NEW**: `models/official_ss4rec/` (official RecBole implementation)
+   - Uses official `mamba-ssm==2.2.2` and `s5-pytorch==0.2.1` libraries
+   - Components: Time-Aware SSM, Relation-Aware SSM, Sequential Recommendation
+   - Target: HR@10 > 0.30, NDCG@10 > 0.25 (paper benchmarks)
 
 ### Data Flow Architecture
 ```
@@ -133,28 +135,32 @@ MovieLens Raw Data → ETL Pipeline → Feature Engineering → Model Training
 - **Config Management**: `configs/` - YAML-based model and training configurations
 - **Results Tracking**: Integration with Weights & Biases for experiment logging
 
-## SS4Rec Implementation Details
+## SS4Rec Implementation Status
 
-### Critical Implementation Notes
-- **Tensor Broadcasting**: SS4Rec requires careful tensor shape management for sequence operations
-- **NaN Detection**: Enable debug mode with `--debug` flag for comprehensive NaN tracking
-- **Memory Management**: A6000 optimized with batch_size=1024 for SS4Rec
-- **State Space Components**: Located in `models/sota_2025/components/state_space_models.py`
+### 🚨 CRITICAL: Implementation Reset Required
+- **Current Status**: Custom implementation causing gradient explosion
+- **Issue**: Major deviations from SOTA paper (arXiv:2502.08132)
+- **Solution**: Complete reset to official RecBole + mamba-ssm + s5-pytorch
 
-### Debug Mode Usage
+### ⚠️ DEPRECATED Implementation Details (Archive Only)
+- **Custom SSM**: `models/sota_2025/` (archived due to numerical instability)
+- **Gradient Issues**: Exploding gradients after epoch 3 
+- **Root Cause**: Custom Mamba selective scan causing exponential overflow
+
+### 🚀 NEW Official Implementation (In Progress)
 ```bash
-# Enable comprehensive NaN detection and logging
-export SS4REC_DEBUG_LOGGING=1
-python training/train_ss4rec.py --debug
-
-# Production mode for optimal performance
-python training/train_ss4rec.py --production
+# Official dependencies for numerical stability
+uv pip install recbole==1.0
+uv pip install mamba-ssm==2.2.2  
+uv pip install s5-pytorch==0.2.1
+uv pip install causal-conv1d>=1.2.0
 ```
 
-### State Space Model Components
-- **SSBlock**: Core state space building block with residual connections
-- **Time-Aware SSM**: Handles irregular timestamps in MovieLens data
-- **Relation-Aware SSM**: Models user-item contextual dependencies
+### State Space Model Components (Official)
+- **RecBole Framework**: Standard sequential recommendation evaluation
+- **Official Mamba**: Battle-tested selective state space implementation
+- **Official S5**: Time-aware state space models
+- **Standard Evaluation**: HR@K, NDCG@K, MRR@K metrics
 
 ## RunPod Training Workflow
 
@@ -191,15 +197,17 @@ The project is optimized for A6000 GPU training on RunPod:
 
 ## Performance Targets & Evaluation
 
-### Primary Metrics
-- **Validation RMSE**: < 0.70 (SS4Rec goal vs ~0.87 NCF baseline)
-- **Training Efficiency**: A6000 optimized for both models
-- **Business Metrics**: HR@10, NDCG@10, MRR@10
+### 🚀 Updated Performance Targets (Official Implementation)
+- **SS4Rec HR@10**: > 0.30 (paper benchmark)
+- **SS4Rec NDCG@10**: > 0.25 (paper benchmark)  
+- **SS4Rec MRR@10**: Competitive performance vs NCF
+- **Training Stability**: Zero gradient explosion (NaN/Inf errors)
 
-### Evaluation Protocol
-- **Leave-One-Out**: Primary evaluation methodology
-- **Temporal Splitting**: Respects time-based data splits
-- **Business Rules**: Integration with real-world recommendation constraints
+### Evaluation Protocol (Updated)
+- **Leave-One-Out**: Standard RecBole evaluation methodology
+- **Ranking Metrics**: HR@K, NDCG@K, MRR@K (industry standard)
+- **Fair Comparison**: Both SS4Rec and NCF using same RecBole framework
+- **Temporal Consistency**: Proper sequential recommendation evaluation
 
 ## Production Deployment
 

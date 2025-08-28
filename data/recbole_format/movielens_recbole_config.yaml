@@ -1,0 +1,25 @@
+
+# RecBole Dataset Configuration for movielens
+# Generated automatically from MovieLens processed data
+
+# Dataset Information  
+n_users: 170429
+n_items: 48680  
+n_interactions: 20480050
+sparsity: 0.997531
+
+# Sequential Parameters
+MAX_ITEM_LIST_LENGTH: 50  # Adaptive max length
+
+# Field Types (RecBole format)
+field_separator: "\t"
+seq_separator: " "
+
+# Load Configuration
+load_col:
+  inter: [user_id, item_id, timestamp]
+  
+# Evaluation
+eval_args:
+  split: {'LS': 'valid_and_test'}  # Leave-one-out splitting
+  order: 'TO'                        # Time-ordered

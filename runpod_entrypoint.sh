@@ -1,11 +1,12 @@
 #!/bin/bash
 
-# RunPod Neural CF Training Entrypoint Script
+# RunPod MovieLens RecSys Training Entrypoint Script
 # Automated training setup for A6000 GPU instances
+# Supports: NCF Baseline, Official SS4Rec, Custom SS4Rec (deprecated)
 
 set -e  # Exit on any error
 
-echo "🚀 Neural CF Training on RunPod"
+echo "🚀 MovieLens RecSys Training on RunPod"
 echo "================================"
 echo "🖥️  GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader,nounits)"
 echo "💾 Memory: $(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits) MB"
@@ -65,7 +66,7 @@ while [[ $# -gt 0 ]]; do
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
-            echo "  --model MODEL     Model type (ncf, ss4rec) [default: ncf]"
+            echo "  --model MODEL     Model type (ncf, ss4rec, ss4rec-official) [default: ncf]"
             echo "  --config FILE     Custom config file"
             echo "  --no-wandb        Disable W&B logging"
             echo "  --no-setup        Skip automatic setup"
@@ -148,7 +149,7 @@ log "🔍 Current working directory: $(pwd)"
 log "🔍 Available requirements files:"
 ls -la requirements*.txt 2>/dev/null || log "   No requirements*.txt files found"
 
-if [ "$MODEL_TYPE" = "ss4rec" ] && [ -f "requirements_ss4rec.txt" ]; then
+if [[ "$MODEL_TYPE" == "ss4rec"* ]] && [ -f "requirements_ss4rec.txt" ]; then
     log "🧠 Installing SS4Rec requirements with uv..."
     
     # Install core dependencies first
@@ -199,7 +200,7 @@ python -c "import torch; print(f'PyTorch version: {torch.__version__}')"
 python -c "import pandas; print(f'Pandas version: {pandas.__version__}')"
 
 # Additional verification for SS4Rec
-if [ "$MODEL_TYPE" = "ss4rec" ]; then
+if [[ "$MODEL_TYPE" == "ss4rec"* ]]; then
     log "🧠 Verifying SS4Rec dependencies..."
     python -c "import mamba_ssm; print(f'Mamba-SSM version: {mamba_ssm.__version__}')" || log "⚠️  Mamba-SSM import failed - may need additional setup"
     python -c "import numpy; print(f'NumPy version: {numpy.__version__}')"
@@ -255,6 +256,8 @@ if [ -z "$CONFIG_FILE" ]; then
         CONFIG_FILE="configs/ncf_runpod.yaml"
     elif [ "$MODEL_TYPE" = "ss4rec" ]; then
         CONFIG_FILE="configs/ss4rec_a6000_optimized.yaml"
+    elif [ "$MODEL_TYPE" = "ss4rec-official" ]; then
+        CONFIG_FILE="configs/official/ss4rec_official.yaml"
     else
         CONFIG_FILE="configs/${MODEL_TYPE}.yaml"
     fi
@@ -484,16 +487,22 @@ else
 fi
 log "================================"
 
-# Build training command - bypass broken intermediate layers for ss4rec
-if [ "$MODEL_TYPE" = "ss4rec" ]; then
-    # CRITICAL FIX: Direct call to train_ss4rec.py to bypass broken execution chain
+# Build training command
+if [ "$MODEL_TYPE" = "ss4rec-official" ]; then
+    # Official SS4Rec using RecBole framework
+    TRAIN_CMD="python training/official/runpod_train_ss4rec_official.py --config $CONFIG_FILE --install-deps --prepare-data"
+elif [ "$MODEL_TYPE" = "ss4rec" ]; then
+    # Custom SS4Rec (deprecated - has gradient explosion issues)
+    log "⚠️ WARNING: Using deprecated custom SS4Rec implementation"
+    log "⚠️ This implementation has gradient explosion issues after epoch 3"
+    log "💡 Consider using --model ss4rec-official instead"
     if [ "$DEBUG_LOGGING" = true ]; then
         TRAIN_CMD="python -c 'from debug_logging_config import setup_comprehensive_debug_logging; setup_comprehensive_debug_logging()' && python training/train_ss4rec.py --config $CONFIG_FILE"
     else
         TRAIN_CMD="python training/train_ss4rec.py --config $CONFIG_FILE"
     fi
 else
-    # Keep original execution chain for other models
+    # NCF and other models
     if [ "$DEBUG_LOGGING" = true ]; then
         TRAIN_CMD="python -c 'from debug_logging_config import setup_comprehensive_debug_logging; setup_comprehensive_debug_logging()' && python auto_train_ss4rec.py --model $MODEL_TYPE --config $CONFIG_FILE"
     else

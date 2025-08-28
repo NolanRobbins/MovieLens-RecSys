@@ -1,0 +1,79 @@
+# SS4Rec A6000-Optimized Configuration
+# Designed to fully utilize A6000 48GB VRAM and compute capacity
+
+model:
+  name: "ss4rec"
+  type: "sequential_recommendation"
+  
+  # Optimized model parameters for A6000
+  d_model: 64               # Model dimension (embedding size)
+  n_layers: 2               # Number of SS blocks
+  d_state: 16               # State space dimension
+  d_conv: 4                 # Convolution dimension
+  expand: 2                 # Expansion factor for Mamba
+  dt_min: 0.001             # Minimum discretization step
+  dt_max: 0.1               # Maximum discretization step
+  dropout: 0.1              # Dropout probability
+  max_seq_len: 100          # OPTIMIZED: Increased from 50 for better patterns
+  rating_prediction: true   # Enable rating prediction mode
+    
+training:
+  batch_size: 2048          # CRITICAL: 8x increase to fully utilize A6000 48GB VRAM
+  num_epochs: 100           # Full production training for RMSE < 0.70 target
+  learning_rate: 0.001      # AdamW learning rate
+  weight_decay: 0.00001     # L2 regularization
+  early_stopping: 5         # Early stopping patience
+  gradient_clip: 1.0        # Gradient clipping norm
+  mixed_precision: true     # CRITICAL: Enable automatic mixed precision for 2x speedup
+  
+  # Learning rate scheduler
+  scheduler:
+    type: "ReduceLROnPlateau"
+    mode: "min"
+    factor: 0.5
+    patience: 3
+    
+data:
+  # Sequential data parameters (DATASET SIZE CONTROLLED)
+  min_seq_len: 5            # Minimum sequence length
+  max_sequences_per_user: 5 # CRITICAL: Keeps dataset at ~850K samples
+  test_split: 0.2           # Test set ratio
+  val_split: 0.1            # Validation set ratio
+  seed: 42                  # Random seed
+  
+paths:
+  data_dir: "data/processed"
+  model_dir: "results/ss4rec_a6000"
+  log_dir: "logs"
+  cache_dir: "data/cache"
+
+# Weights & Biases configuration
+wandb:
+  project: "movielens-ss4rec-a6000"
+  tags: 
+    - "ss4rec"
+    - "a6000-optimized"
+    - "production"
+  notes: "A6000-optimized SS4Rec training with full GPU utilization"
+
+# Hardware optimization for A6000
+hardware:
+  device: "auto"
+  num_workers: 8            # INCREASED: Better data loading parallelism
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 4        # Aggressive prefetching for faster data loading
+
+# Logging configuration
+logging:
+  level: "INFO"
+  log_interval: 25          # Log every 25 batches (fewer batches now)
+  save_model_every: 1       # Save checkpoint every epoch
+
+# Performance expectations with this config:
+# - Dataset: ~850K samples (controlled by max_sequences_per_user=5)
+# - Batches per epoch: ~415 (850K / 2048)
+# - Expected batch time: 30-60 seconds (vs 3-5 minutes)
+# - Expected epoch time: 7-25 minutes (vs 276 hours)
+# - GPU utilization: 85-95% (vs 40-80%)
+# - VRAM usage: 15-25GB (vs 2GB)
