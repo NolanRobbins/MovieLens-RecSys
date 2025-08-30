@@ -143,6 +143,85 @@ else
     error_exit "Virtual environment not found at .venv"
 fi
 
+# Download RecBole format data (train+val combined, test excluded for future ETL)
+download_recbole_data() {
+    local data_dir="data/recbole_format"
+    local inter_file="$data_dir/movielens.inter"
+    local config_file="$data_dir/movielens_recbole_config.yaml"
+    local stats_file="$data_dir/movielens_stats.json"
+    
+    log "📊 Checking RecBole format data..."
+    
+    # Create directory if it doesn't exist
+    mkdir -p "$data_dir"
+    
+    # Check if data already exists and is valid
+    if [ -f "$inter_file" ] && [ -f "$config_file" ] && [ -s "$inter_file" ]; then
+        local file_size=$(stat -f%z "$inter_file" 2>/dev/null || stat -c%s "$inter_file" 2>/dev/null || echo "0")
+        if [ "$file_size" -gt 10000000 ]; then  # > 10MB indicates valid data
+            log "✅ RecBole format data already exists (${file_size} bytes)"
+            return 0
+        fi
+    fi
+    
+    log "📥 Downloading RecBole format data from Google Drive..."
+    log "🎯 Data: Train + Val combined (20M+ interactions, ~400MB)"
+    log "⚠️  Test data excluded for future ETL pipeline evaluation"
+    
+    # TODO: Replace with your actual Google Drive download links
+    # You'll need to replace these URLs with the actual Google Drive download links
+    local GDRIVE_INTER_URL="https://drive.google.com/uc?export=download&id=1HsS87bMnAkomOzBa3IdxbWeintPnao0C"
+    local GDRIVE_CONFIG_URL="https://drive.google.com/uc?export=download&id=1Uxe42ENupS6cM5GYDxgARdx-ucPJzPof"
+    local GDRIVE_STATS_URL="https://drive.google.com/uc?export=download&id=1dVKkIuDZrMFBahKLLKmhvoG1gs4-ayVG"
+    
+    # Download interaction file (.inter)
+    log "📥 Downloading movielens.inter (~400MB)..."
+    if command -v wget >/dev/null 2>&1; then
+        wget -O "$inter_file" "$GDRIVE_INTER_URL" || error_exit "Failed to download .inter file"
+    elif command -v curl >/dev/null 2>&1; then
+        curl -L -o "$inter_file" "$GDRIVE_INTER_URL" || error_exit "Failed to download .inter file"
+    else
+        error_exit "Neither wget nor curl available for downloading data"
+    fi
+    
+    # Download config file
+    log "📥 Downloading RecBole config..."
+    if command -v wget >/dev/null 2>&1; then
+        wget -O "$config_file" "$GDRIVE_CONFIG_URL" || log "⚠️ Config download failed, will use default"
+    elif command -v curl >/dev/null 2>&1; then
+        curl -L -o "$config_file" "$GDRIVE_CONFIG_URL" || log "⚠️ Config download failed, will use default"
+    fi
+    
+    # Download stats file
+    log "📥 Downloading dataset statistics..."
+    if command -v wget >/dev/null 2>&1; then
+        wget -O "$stats_file" "$GDRIVE_STATS_URL" || log "⚠️ Stats download failed, continuing"
+    elif command -v curl >/dev/null 2>&1; then
+        curl -L -o "$stats_file" "$GDRIVE_STATS_URL" || log "⚠️ Stats download failed, continuing"
+    fi
+    
+    # Verify downloaded data
+    if [ -f "$inter_file" ] && [ -s "$inter_file" ]; then
+        local downloaded_size=$(stat -f%z "$inter_file" 2>/dev/null || stat -c%s "$inter_file" 2>/dev/null || echo "0")
+        log "✅ RecBole data downloaded successfully (${downloaded_size} bytes)"
+        
+        # Quick validation
+        local line_count=$(head -10 "$inter_file" | wc -l)
+        if [ "$line_count" -gt 5 ]; then
+            log "✅ Data format validation passed"
+        else
+            error_exit "❌ Downloaded data appears corrupted"
+        fi
+    else
+        error_exit "❌ Failed to download RecBole format data"
+    fi
+}
+
+# Download data for SS4Rec models
+if [[ "$MODEL_TYPE" == "ss4rec"* ]]; then
+    download_recbole_data
+fi
+
 # Install requirements using uv pip
 log "📦 Installing requirements with uv pip..."
 log "🔍 Current working directory: $(pwd)"

@@ -60,15 +60,16 @@ def setup_logging():
     )
 
 
-def load_processed_movielens_data(data_dir: str) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+def load_processed_movielens_data(data_dir: str, include_test: bool = False) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
     Load our processed MovieLens data
     
     Args:
         data_dir: Path to processed data directory
+        include_test: Whether to include test data (False for RecBole training, True for full dataset)
         
     Returns:
-        combined_data: Combined train/val/test data for RecBole
+        combined_data: Combined train/val data for RecBole (test excluded for future ETL pipeline)
         metadata: Data statistics and mappings
     """
     data_path = Path(data_dir)
@@ -81,9 +82,22 @@ def load_processed_movielens_data(data_dir: str) -> Tuple[pd.DataFrame, Dict[str
     if val_path.exists():
         val_data = pd.read_csv(val_path)
         combined_data = pd.concat([train_data, val_data], ignore_index=True)
+        logging.info(f"Combined train ({len(train_data)}) + val ({len(val_data)}) = {len(combined_data)} interactions")
     else:
         logging.warning("No validation data found, using only train data")
         combined_data = train_data.copy()
+    
+    # Optionally include test data (not recommended for RecBole training - kept for future ETL)
+    if include_test:
+        test_path = data_path / 'test_data.csv'
+        if test_path.exists():
+            test_data = pd.read_csv(test_path)
+            combined_data = pd.concat([combined_data, test_data], ignore_index=True)
+            logging.info(f"Added test data: {len(test_data)} interactions")
+        else:
+            logging.warning("No test data found")
+    else:
+        logging.info("🎯 Test data EXCLUDED for RecBole training (reserved for future ETL pipeline)")
     
     # Load metadata if available
     metadata = {}

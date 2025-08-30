@@ -90,21 +90,43 @@ def install_dependencies():
     logging.info("📦 Installing official SS4Rec dependencies...")
     
     try:
-        # Install from requirements file
+        # Check if uv is available (preferred method)
+        uv_available = subprocess.run(['uv', '--version'], capture_output=True).returncode == 0
+        
         requirements_file = project_root / 'requirements_ss4rec.txt'
-        if requirements_file.exists():
-            cmd = [sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)]
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            logging.info("✅ Dependencies installed successfully")
-            return True
-        else:
+        if not requirements_file.exists():
             logging.error(f"❌ Requirements file not found: {requirements_file}")
             return False
+        
+        if uv_available:
+            # Use uv pip for faster installation
+            logging.info("Using uv for dependency installation...")
+            cmd = ['uv', 'pip', 'install', '-r', str(requirements_file)]
+        else:
+            # Fallback to regular pip, but first ensure pip is available
+            try:
+                # Try to import pip to check if it's available
+                import pip
+                cmd = [sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)]
+            except ImportError:
+                # If pip is not available, try to bootstrap it
+                logging.warning("pip not available, attempting to bootstrap...")
+                subprocess.run([sys.executable, '-m', 'ensurepip', '--default-pip'], 
+                              capture_output=True, check=True)
+                cmd = [sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)]
+        
+        # Run installation command
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        logging.info("✅ Dependencies installed successfully")
+        return True
             
     except subprocess.CalledProcessError as e:
         logging.error(f"❌ Failed to install dependencies: {e}")
         logging.error(f"Stdout: {e.stdout}")
         logging.error(f"Stderr: {e.stderr}")
+        return False
+    except Exception as e:
+        logging.error(f"❌ Unexpected error during dependency installation: {e}")
         return False
 
 
