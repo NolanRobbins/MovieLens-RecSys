@@ -18,7 +18,7 @@ mamba-ssm==2.2.2
 s5-pytorch==0.2.1
 
 # RecBole framework (REQUIRED for official SS4Rec implementation)
-recbole==1.0
+recbole==1.2.0
 
 # Experiment tracking and monitoring
 wandb>=0.15.0
