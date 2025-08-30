@@ -115,11 +115,6 @@ if [ "$AUTO_SETUP" = true ]; then
             pip install uv || error_exit "Failed to install uv"
         fi
         
-        # Install gdown for Google Drive downloads
-        if ! command -v gdown &> /dev/null; then
-            log "📦 Installing gdown for Google Drive downloads..."
-            pip install gdown || log "⚠️ Failed to install gdown, will fallback to wget/curl"
-        fi
         
         # Create virtual environment with uv
         if [ ! -d ".venv" ]; then
@@ -188,31 +183,25 @@ download_recbole_data() {
     local GDRIVE_CONFIG_URL="https://drive.google.com/uc?export=download&id=1Uxe42ENupS6cM5GYDxgARdx-ucPJzPof"
     local GDRIVE_STATS_URL="https://drive.google.com/uc?export=download&id=1dVKkIuDZrMFBahKLLKmhvoG1gs4-ayVG"
     
-    # Download interaction file (.inter)
+    # Download interaction file (.inter) using gdown (same method that worked for 1.3GB train_data.csv)
     log "📥 Downloading movielens.inter (~400MB)..."
-    if command -v wget >/dev/null 2>&1; then
-        wget -O "$inter_file" "$GDRIVE_INTER_URL" || error_exit "Failed to download .inter file"
-    elif command -v curl >/dev/null 2>&1; then
-        curl -L -o "$inter_file" "$GDRIVE_INTER_URL" || error_exit "Failed to download .inter file"
-    else
-        error_exit "Neither wget nor curl available for downloading data"
+    
+    # Install gdown if not available (exactly like the working implementation)
+    if ! command -v gdown >/dev/null 2>&1; then
+        log "📦 Installing gdown for Google Drive downloads..."
+        pip install gdown --quiet || error_exit "Failed to install gdown"
     fi
     
-    # Download config file
+    # Use gdown with direct Google Drive URL (same as working train_data.csv download)
+    gdown "$GDRIVE_INTER_URL" -O "$inter_file" || error_exit "Failed to download .inter file"
+    
+    # Download config file using gdown
     log "📥 Downloading RecBole config..."
-    if command -v wget >/dev/null 2>&1; then
-        wget -O "$config_file" "$GDRIVE_CONFIG_URL" || log "⚠️ Config download failed, will use default"
-    elif command -v curl >/dev/null 2>&1; then
-        curl -L -o "$config_file" "$GDRIVE_CONFIG_URL" || log "⚠️ Config download failed, will use default"
-    fi
+    gdown "$GDRIVE_CONFIG_URL" -O "$config_file" || log "⚠️ Config download failed, will use default"
     
-    # Download stats file
+    # Download stats file using gdown
     log "📥 Downloading dataset statistics..."
-    if command -v wget >/dev/null 2>&1; then
-        wget -O "$stats_file" "$GDRIVE_STATS_URL" || log "⚠️ Stats download failed, continuing"
-    elif command -v curl >/dev/null 2>&1; then
-        curl -L -o "$stats_file" "$GDRIVE_STATS_URL" || log "⚠️ Stats download failed, continuing"
-    fi
+    gdown "$GDRIVE_STATS_URL" -O "$stats_file" || log "⚠️ Stats download failed, continuing"
     
     # Verify downloaded data
     if [ -f "$inter_file" ] && [ -s "$inter_file" ]; then
