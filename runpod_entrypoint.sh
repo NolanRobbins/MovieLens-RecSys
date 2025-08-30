@@ -209,13 +209,22 @@ download_recbole_data() {
     # Verify downloaded data
     if [ -f "$inter_file" ] && [ -s "$inter_file" ]; then
         local downloaded_size=$(stat -f%z "$inter_file" 2>/dev/null || stat -c%s "$inter_file" 2>/dev/null || echo "0")
-        log "✅ RecBole data downloaded successfully (${downloaded_size} bytes)"
+        local size_mb=$((downloaded_size / 1024 / 1024))
+        log "✅ RecBole data downloaded successfully (${downloaded_size} bytes = ${size_mb}MB)"
         
-        # Quick validation
-        local line_count=$(head -10 "$inter_file" | wc -l)
-        if [ "$line_count" -gt 5 ]; then
-            log "✅ Data format validation passed"
+        # Validate file size is reasonable (should be >100MB for our dataset)
+        if [ "$downloaded_size" -gt 100000000 ]; then  # > 100MB
+            # Check first line for proper format
+            local first_line=$(head -1 "$inter_file")
+            if echo "$first_line" | grep -q "user_id.*item_id.*timestamp"; then
+                log "✅ Data format validation passed - proper RecBole format detected"
+            else
+                log "⚠️ Header format: $first_line"
+                # Still continue if file size is good
+                log "✅ Large file size suggests download succeeded, continuing..."
+            fi
         else
+            log "❌ File too small (${size_mb}MB), likely an error page"
             error_exit "❌ Downloaded data appears corrupted"
         fi
     else
