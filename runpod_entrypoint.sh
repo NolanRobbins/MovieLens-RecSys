@@ -115,6 +115,12 @@ if [ "$AUTO_SETUP" = true ]; then
             pip install uv || error_exit "Failed to install uv"
         fi
         
+        # Install gdown for Google Drive downloads
+        if ! command -v gdown &> /dev/null; then
+            log "📦 Installing gdown for Google Drive downloads..."
+            pip install gdown || log "⚠️ Failed to install gdown, will fallback to wget/curl"
+        fi
+        
         # Create virtual environment with uv
         if [ ! -d ".venv" ]; then
             log "🐍 Creating virtual environment with uv..."
@@ -174,14 +180,37 @@ download_recbole_data() {
     local GDRIVE_CONFIG_URL="https://drive.google.com/uc?export=download&id=1Uxe42ENupS6cM5GYDxgARdx-ucPJzPof"
     local GDRIVE_STATS_URL="https://drive.google.com/uc?export=download&id=1dVKkIuDZrMFBahKLLKmhvoG1gs4-ayVG"
     
-    # Download interaction file (.inter)
+    # Download interaction file (.inter) - Handle Google Drive large file download
     log "📥 Downloading movielens.inter (~400MB)..."
-    if command -v wget >/dev/null 2>&1; then
-        wget -O "$inter_file" "$GDRIVE_INTER_URL" || error_exit "Failed to download .inter file"
+    
+    # Extract file ID from URL
+    local file_id=$(echo "$GDRIVE_INTER_URL" | sed 's/.*id=\([^&]*\).*/\1/')
+    log "📋 File ID: $file_id"
+    
+    # Use gdown if available (best for large Google Drive files)
+    if command -v gdown >/dev/null 2>&1; then
+        log "📥 Using gdown for large file download..."
+        gdown --id "$file_id" -O "$inter_file" || error_exit "Failed to download .inter file with gdown"
+    elif command -v wget >/dev/null 2>&1; then
+        log "📥 Using wget with Google Drive workaround..."
+        # First try direct download
+        wget --no-check-certificate -O "$inter_file" "$GDRIVE_INTER_URL" 2>/dev/null || {
+            # If that fails, try the large file workaround
+            log "🔄 Trying large file download method..."
+            local confirm_url="https://drive.google.com/uc?export=download&confirm=t&id=$file_id"
+            wget --no-check-certificate --load-cookies /tmp/cookies.txt -O "$inter_file" "$confirm_url" || error_exit "Failed to download .inter file"
+        }
     elif command -v curl >/dev/null 2>&1; then
-        curl -L -o "$inter_file" "$GDRIVE_INTER_URL" || error_exit "Failed to download .inter file"
+        log "📥 Using curl with Google Drive workaround..."
+        # Try direct download first
+        curl -L -o "$inter_file" "$GDRIVE_INTER_URL" 2>/dev/null || {
+            # If that fails, try the large file workaround
+            log "🔄 Trying large file download method..."
+            local confirm_url="https://drive.google.com/uc?export=download&confirm=t&id=$file_id"
+            curl -L -o "$inter_file" "$confirm_url" || error_exit "Failed to download .inter file"
+        }
     else
-        error_exit "Neither wget nor curl available for downloading data"
+        error_exit "No download tool available (wget, curl, or gdown)"
     fi
     
     # Download config file
@@ -203,14 +232,43 @@ download_recbole_data() {
     # Verify downloaded data
     if [ -f "$inter_file" ] && [ -s "$inter_file" ]; then
         local downloaded_size=$(stat -f%z "$inter_file" 2>/dev/null || stat -c%s "$inter_file" 2>/dev/null || echo "0")
-        log "✅ RecBole data downloaded successfully (${downloaded_size} bytes)"
+        log "✅ RecBole data downloaded (${downloaded_size} bytes)"
         
-        # Quick validation
+        # Check if file is too small (indicates HTML error page instead of data)
+        if [ "$downloaded_size" -lt 1000000 ]; then  # Less than 1MB indicates error
+            log "⚠️ Downloaded file seems too small, checking content..."
+            
+            # Check if it's an HTML file (Google Drive error page)
+            if head -5 "$inter_file" | grep -q -i "html\|<!DOCTYPE\|<title"; then
+                log "❌ Downloaded HTML error page instead of data file"
+                log "🔍 This usually means Google Drive requires virus scan confirmation"
+                log "💡 Solutions:"
+                log "   1. Try a different cloud provider (Dropbox, OneDrive)"
+                log "   2. Split the file into smaller chunks (<100MB each)"
+                log "   3. Use a different download method"
+                
+                # Show first few lines for debugging
+                log "📄 File content (first 5 lines):"
+                head -5 "$inter_file" | sed 's/^/   /'
+                
+                error_exit "❌ Downloaded data is corrupted (HTML page instead of data)"
+            fi
+        fi
+        
+        # Quick validation for proper format
         local line_count=$(head -10 "$inter_file" | wc -l)
         if [ "$line_count" -gt 5 ]; then
-            log "✅ Data format validation passed"
+            # Check if first line contains expected headers
+            local first_line=$(head -1 "$inter_file")
+            if echo "$first_line" | grep -q "user_id.*item_id.*timestamp"; then
+                log "✅ Data format validation passed"
+            else
+                log "⚠️ Header format may be incorrect: $first_line"
+                log "✅ Continuing anyway (may still work)"
+            fi
         else
-            error_exit "❌ Downloaded data appears corrupted"
+            log "❌ Downloaded data appears corrupted (too few lines)"
+            error_exit "❌ Downloaded data validation failed"
         fi
     else
         error_exit "❌ Failed to download RecBole format data"
