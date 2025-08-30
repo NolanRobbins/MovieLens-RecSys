@@ -1,4 +1,5 @@
 # SS4Rec Dependencies
+# NOTE: s5-pytorch requires Python 3.10+ and PyTorch 2.0+
 # Core ML framework dependencies (install torch first to resolve build dependencies)
 torch>=2.0.0
 numpy>=1.21.0,<2.0.0
@@ -15,7 +16,7 @@ setuptools>=60.0
 # State Space Model dependencies (mamba-ssm requires torch to be available during build)
 causal-conv1d>=1.2.0
 mamba-ssm==2.2.2
-s5-pytorch==0.2.1
+s5-pytorch>=0.2.1
 
 # RecBole framework (REQUIRED for official SS4Rec implementation)
 recbole==1.2.0
