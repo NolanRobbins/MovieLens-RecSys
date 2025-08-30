@@ -58,7 +58,7 @@ cp -r models/sota_2025/ archive/custom_ss4rec_$(date +%Y%m%d)/
 cp -r training/ archive/custom_ss4rec_$(date +%Y%m%d)/
 
 # Install official libraries
-uv pip install recbole==1.0
+uv pip install recbole==1.2.0
 uv pip install mamba-ssm==2.2.2
 uv pip install s5-pytorch==0.2.1
 uv pip install causal-conv1d>=1.2.0
@@ -197,7 +197,7 @@ Current training exhibits exploding gradients - resources better spent on proper
 # Step 1: Archive and install
 mkdir -p archive/custom_ss4rec_20250828
 cp -r models/sota_2025/ archive/custom_ss4rec_20250828/
-uv pip install recbole==1.0 mamba-ssm==2.2.2 s5-pytorch==0.2.1
+uv pip install recbole==1.2.0 mamba-ssm==2.2.2 s5-pytorch==0.2.1
 
 # Step 2: Create official implementation structure
 mkdir -p models/official_ss4rec/

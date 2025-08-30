@@ -375,4 +375,4 @@ if __name__ == "__main__":
             print(f"❌ Error creating model: {e}")
     else:
         print("❌ Missing required dependencies for full testing")
-        print("Install with: uv pip install recbole==1.0 mamba-ssm==2.2.2 s5-pytorch==0.2.1")
+        print("Install with: uv pip install recbole==1.2.0 mamba-ssm==2.2.2 s5-pytorch==0.2.1")

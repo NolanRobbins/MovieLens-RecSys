@@ -186,13 +186,13 @@ def main():
     # Check dependencies
     if not RECBOLE_AVAILABLE:
         logging.error("❌ RecBole not available")
-        logging.error("Install with: uv pip install recbole==1.0")
+        logging.error("Install with: uv pip install recbole==1.2.0")
         return 1
     
     try:
         # Import test to check other dependencies
         from mamba_ssm import Mamba
-        from s5_pytorch import S5
+        from s5 import S5
         logging.info("✅ All dependencies available")
     except ImportError as e:
         logging.error(f"❌ Missing dependency: {e}")
