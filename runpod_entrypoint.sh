@@ -163,11 +163,15 @@ download_recbole_data() {
     
     # Check if data already exists and is valid
     if [ -f "$inter_file" ] && [ -s "$inter_file" ]; then
-        local file_size=$(stat -f%z "$inter_file" 2>/dev/null || stat -c%s "$inter_file" 2>/dev/null || echo "0")
+        # Use ls -l to get file size (works on all systems)
+        local file_size=$(ls -l "$inter_file" | awk '{print $5}')
         local size_mb=$((file_size / 1024 / 1024))
+        
+        log "📊 Found existing file: ${file_size} bytes (${size_mb}MB)"
+        
         if [ "$file_size" -gt 100000000 ]; then  # > 100MB indicates valid data
-            log "✅ RecBole format data already exists (${file_size} bytes = ${size_mb}MB)"
-            log "✅ Skipping download - using existing valid data"
+            log "✅ RecBole format data already exists - using existing valid data"
+            log "✅ Skipping download to preserve existing file"
             return 0
         else
             log "⚠️ Existing file too small (${size_mb}MB), will re-download"
@@ -212,9 +216,10 @@ download_recbole_data() {
     
     # Verify downloaded data
     if [ -f "$inter_file" ] && [ -s "$inter_file" ]; then
-        local downloaded_size=$(stat -f%z "$inter_file" 2>/dev/null || stat -c%s "$inter_file" 2>/dev/null || echo "0")
+        # Use ls -l to get file size (works on all systems)
+        local downloaded_size=$(ls -l "$inter_file" | awk '{print $5}')
         local size_mb=$((downloaded_size / 1024 / 1024))
-        log "✅ RecBole data downloaded successfully (${downloaded_size} bytes = ${size_mb}MB)"
+        log "✅ RecBole data downloaded (${downloaded_size} bytes = ${size_mb}MB)"
         
         # Validate file size is reasonable (should be >100MB for our dataset)
         if [ "$downloaded_size" -gt 100000000 ]; then  # > 100MB
@@ -228,7 +233,8 @@ download_recbole_data() {
                 log "✅ Large file size suggests download succeeded, continuing..."
             fi
         else
-            log "❌ File too small (${size_mb}MB), likely an error page"
+            log "❌ File too small (${size_mb}MB), likely Google Drive error page"
+            log "💡 Try uploading to a different cloud provider or check file permissions"
             error_exit "❌ Downloaded data appears corrupted"
         fi
     else
