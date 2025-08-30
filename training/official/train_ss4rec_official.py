@@ -29,12 +29,15 @@ try:
     from recbole.data import create_dataset, data_preparation
     from recbole.trainer import Trainer
     from recbole.utils import init_seed, init_logger
+    from models.official_ss4rec import SS4RecOfficial, create_ss4rec_config
     RECBOLE_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     RECBOLE_AVAILABLE = False
-    print("❌ RecBole not available. Install with: uv pip install recbole==1.2.0")
-
-from models.official_ss4rec import SS4RecOfficial, create_ss4rec_config
+    print(f"❌ RecBole or SS4Rec import failed: {e}")
+    print("Install with: uv pip install recbole==1.2.0")
+    # Define dummy classes to prevent further import errors
+    SS4RecOfficial = None
+    create_ss4rec_config = None
 
 
 def setup_logging(log_level: str = 'INFO', log_file: str = None):
