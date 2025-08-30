@@ -162,11 +162,15 @@ download_recbole_data() {
     mkdir -p "$data_dir"
     
     # Check if data already exists and is valid
-    if [ -f "$inter_file" ] && [ -f "$config_file" ] && [ -s "$inter_file" ]; then
+    if [ -f "$inter_file" ] && [ -s "$inter_file" ]; then
         local file_size=$(stat -f%z "$inter_file" 2>/dev/null || stat -c%s "$inter_file" 2>/dev/null || echo "0")
-        if [ "$file_size" -gt 10000000 ]; then  # > 10MB indicates valid data
-            log "✅ RecBole format data already exists (${file_size} bytes)"
+        local size_mb=$((file_size / 1024 / 1024))
+        if [ "$file_size" -gt 100000000 ]; then  # > 100MB indicates valid data
+            log "✅ RecBole format data already exists (${file_size} bytes = ${size_mb}MB)"
+            log "✅ Skipping download - using existing valid data"
             return 0
+        else
+            log "⚠️ Existing file too small (${size_mb}MB), will re-download"
         fi
     fi
     
