@@ -104,9 +104,9 @@ if [ "$AUTO_SETUP" = true ]; then
         # Update system packages
         apt-get update -qq || log "⚠️  apt-get update failed (continuing...)"
         
-        # Update package lists and install system dependencies
-        log "📦 Updating system packages..."
-        apt-get update -qq || log "⚠️  apt-get update failed (continuing...)"
+        # Install system dependencies for BLAS/LAPACK (needed for scipy)
+        log "📦 Installing BLAS/LAPACK system dependencies..."
+        apt-get install -y libopenblas-dev liblapack-dev gfortran || log "⚠️  BLAS/LAPACK install failed (continuing...)"
 
         
         # Install uv if not present
