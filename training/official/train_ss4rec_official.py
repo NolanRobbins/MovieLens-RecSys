@@ -32,7 +32,7 @@ try:
     RECBOLE_AVAILABLE = True
 except ImportError:
     RECBOLE_AVAILABLE = False
-    print("❌ RecBole not available. Install with: uv pip install recbole==1.0")
+    print("❌ RecBole not available. Install with: uv pip install recbole==1.2.0")
 
 from models.official_ss4rec import SS4RecOfficial, create_ss4rec_config
 
@@ -62,7 +62,7 @@ def train_ss4rec_official(config_file: str, dataset_path: str = None, output_dir
         output_dir: Path to output directory for results
     """
     if not RECBOLE_AVAILABLE:
-        raise ImportError("RecBole is required. Install with: uv pip install recbole==1.0")
+        raise ImportError("RecBole is required. Install with: uv pip install recbole==1.2.0")
     
     logging.info("🚀 Starting Official SS4Rec Training")
     

@@ -36,7 +36,7 @@ except ImportError:
     print("Warning: mamba-ssm not available. Install with: uv pip install mamba-ssm==2.2.2")
 
 try:
-    from s5_pytorch import S5
+    from s5 import S5
     S5_AVAILABLE = True
 except ImportError:
     S5_AVAILABLE = False
