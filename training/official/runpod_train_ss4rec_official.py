@@ -68,7 +68,7 @@ def check_dependencies() -> bool:
         ('torch', 'PyTorch'),
         ('recbole', 'RecBole'),
         ('mamba_ssm', 'Mamba SSM'),
-        ('s5_pytorch', 'S5 PyTorch'),
+        ('s5', 'S5 PyTorch'),
         ('causal_conv1d', 'Causal Conv1D'),
         ('wandb', 'Weights & Biases')
     ]
