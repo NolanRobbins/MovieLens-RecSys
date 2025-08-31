@@ -66,6 +66,9 @@ class SS4RecOfficial:
     4. BPR loss for sequential ranking task
     """
     
+    # Required by RecBole framework
+    type = "SEQUENTIAL"
+    
     def __init__(self, config, dataset):
         # Ensure RecBole imports are available
         if not _ensure_recbole_imports():
