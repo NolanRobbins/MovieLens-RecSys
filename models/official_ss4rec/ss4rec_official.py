@@ -374,7 +374,10 @@ def create_ss4rec_config(dataset_name: str = 'movielens') -> Dict[str, Any]:
         'gpu_id': 0,
         'local_rank': 0,
         'nproc': 1,
+        'world_size': 1,
         'offset': 0,
+        'ip': 'localhost',
+        'port': 29500,
         'reproducibility': True,
         'seed': 2023,
     }
