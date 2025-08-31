@@ -66,11 +66,12 @@ def check_dependencies() -> bool:
     """Check if all required dependencies are installed"""
     required_packages = [
         ('torch', 'PyTorch'),
-        ('recbole', 'RecBole'),
         ('mamba_ssm', 'Mamba SSM'),
         ('s5', 'S5 PyTorch'),
         ('causal_conv1d', 'Causal Conv1D'),
-        ('wandb', 'Weights & Biases')
+        ('wandb', 'Weights & Biases'),
+        ('ray', 'Ray'),
+        ('hyperopt', 'Hyperopt')
     ]
     
     missing_packages = []
@@ -81,6 +82,14 @@ def check_dependencies() -> bool:
         except ImportError:
             missing_packages.append((package, name))
             logging.error(f"❌ {name} not available")
+    
+    # Check RecBole separately - it needs special handling
+    try:
+        import recbole
+        logging.info("✅ RecBole available")
+    except ImportError:
+        missing_packages.append(('recbole', 'RecBole'))
+        logging.error("❌ RecBole not available")
     
     return len(missing_packages) == 0
 

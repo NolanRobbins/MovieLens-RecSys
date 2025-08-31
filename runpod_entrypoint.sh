@@ -269,7 +269,11 @@ if [[ "$MODEL_TYPE" == "ss4rec"* ]] && [ -f "requirements_ss4rec.txt" ]; then
     error_exit "Failed to install any version of mamba-ssm"
     
     log "📦 Installing remaining SS4Rec dependencies..."
-    uv pip install s5-pytorch==0.2.1 recbole==1.2.0 || error_exit "Failed to install s5-pytorch and recbole"
+    uv pip install s5-pytorch==0.2.1 || error_exit "Failed to install s5-pytorch"
+    
+    log "📦 Installing RecBole and its dependencies..."
+    uv pip install "ray>=2.0.0" "hyperopt>=0.2.7" || error_exit "Failed to install RecBole dependencies"
+    uv pip install recbole==1.2.0 || error_exit "Failed to install recbole"
     
     # Install monitoring and dev tools
     log "📦 Installing monitoring and development tools..."
@@ -374,87 +378,9 @@ if [ ! -f "$CONFIG_FILE" ]; then
     fi
 fi
 
-# Smart data download - skip if files already exist and are valid
-log "📥 Checking training data availability..."
-
-mkdir -p data/processed
-
-# Check if files already exist and are valid
-NEED_DOWNLOAD=false
-REQUIRED_FILES=("data/processed/train_data.csv" "data/processed/val_data.csv" "data/processed/data_mappings.pkl")
-
-for file in "${REQUIRED_FILES[@]}"; do
-    if [ ! -f "$file" ]; then
-        log "❌ Missing: $file"
-        NEED_DOWNLOAD=true
-    else
-        # Check if file is not empty
-        if [ ! -s "$file" ]; then
-            log "❌ Empty file: $file"
-            NEED_DOWNLOAD=true
-        else
-            SIZE=$(ls -lh "$file" | awk '{print $5}')
-            log "✅ Found: $file ($SIZE)"
-        fi
-    fi
-done
-
-if [ "$NEED_DOWNLOAD" = true ]; then
-    log "📥 Downloading missing/invalid training data from Google Drive..."
-    
-    # Ensure gdown is installed
-    log "📦 Installing gdown for Google Drive downloads..."
-    uv pip install -q gdown || error_exit "Failed to install gdown"
-    
-    # Download files from Google Drive using file IDs
-    gdown --id 1a3KsSZWcPpSF5Qu_cb2rh7KtR57ypfjS -O data/processed/train_data.csv || error_exit "Failed to download train_data.csv"
-    gdown --id 1GUXQGSVdm_pc_iqh05lvu3nVKRKij_jU -O data/processed/val_data.csv || error_exit "Failed to download val_data.csv"
-    gdown --id 1hm8PM5DdPhlmAl6r8TsSekr-n5MGXmQh -O data/processed/data_mappings.pkl || error_exit "Failed to download data_mappings.pkl"
-    
-    log "✅ Download completed"
-else
-    log "✅ All training data files already present - skipping download"
-    log "💡 This saves significant time on subsequent runs!"
-fi
-
-
-# Verify required training files exist
-log "✅ Verifying training data files..."
-
-# Check for required files
-REQUIRED_FILES=("data/processed/train_data.csv" "data/processed/val_data.csv" "data/processed/data_mappings.pkl")
-for file in "${REQUIRED_FILES[@]}"; do
-    if [ ! -f "$file" ]; then
-        error_exit "Required file missing after Google Drive download: $file"
-    fi
-done
-
-# Check if data has correct temporal columns
-TRAIN_HEADER=$(head -1 data/processed/train_data.csv)
-EXPECTED_COLS=("user_idx" "movie_idx" "rating" "timestamp" "rating_date" "rating_year" "rating_month" "rating_weekday")
-
-log "✅ Validating data format with temporal features..."
-log "   📄 Found header: $TRAIN_HEADER"
-
-# Verify all required columns are present
-MISSING_COLS=()
-for col in "${EXPECTED_COLS[@]}"; do
-    if [[ "$TRAIN_HEADER" != *"$col"* ]]; then
-        MISSING_COLS+=("$col")
-    fi
-done
-
-if [ ${#MISSING_COLS[@]} -eq 0 ]; then
-    log "✅ Training data has correct temporal column format"
-    log "   📄 $(wc -l < data/processed/train_data.csv) training samples"
-    log "   📄 $(wc -l < data/processed/val_data.csv) validation samples"
-    log "   📄 Data mappings: $(ls -lh data/processed/data_mappings.pkl | awk '{print $5}')"
-else
-    log "❌ Training data missing required columns: ${MISSING_COLS[*]}"
-    log "   Expected: user_idx, movie_idx, rating, timestamp, rating_date, rating_year, rating_month, rating_weekday"
-    log "   Found: $TRAIN_HEADER"
-    error_exit "Training data format is incompatible"
-fi
+# Note: Legacy train_data.csv and val_data.csv no longer needed
+# SS4Rec now uses RecBole format data (movielens.inter) which is downloaded separately
+log "✅ Using RecBole format data - legacy CSV files no longer required"
 
 # Training mode configuration
 if [ "$DEBUG_LOGGING" = true ]; then

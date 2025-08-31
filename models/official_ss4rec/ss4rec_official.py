@@ -15,18 +15,30 @@ import torch.nn.functional as F
 from typing import Dict, Any, Optional, Tuple
 import numpy as np
 
-try:
-    from recbole.model.sequential_recommender import SequentialRecommender
-    from recbole.model.loss import BPRLoss
-    RECBOLE_AVAILABLE = True
-except ImportError:
-    # Fallback for development without RecBole
-    RECBOLE_AVAILABLE = False
-    class SequentialRecommender(nn.Module):
-        def __init__(self, config, dataset):
-            super().__init__()
-            self.config = config
-            self.dataset = dataset
+# Defer RecBole imports to avoid import issues during dependency check
+RECBOLE_AVAILABLE = False
+SequentialRecommender = None
+BPRLoss = None
+
+def _ensure_recbole_imports():
+    """Ensure RecBole imports are available"""
+    global RECBOLE_AVAILABLE, SequentialRecommender, BPRLoss
+    if RECBOLE_AVAILABLE:
+        return True
+        
+    try:
+        from recbole.model.sequential_recommender import SequentialRecommender as SR
+        from recbole.model.loss import BPRLoss as Loss
+        SequentialRecommender = SR
+        BPRLoss = Loss
+        RECBOLE_AVAILABLE = True
+        return True
+    except ImportError:
+        # Fallback for development without RecBole
+        SequentialRecommender = nn.Module
+        BPRLoss = nn.Module
+        RECBOLE_AVAILABLE = False
+        return False
 
 try:
     from mamba_ssm import Mamba
@@ -43,7 +55,7 @@ except ImportError:
     print("Warning: s5-pytorch not available. Install with: uv pip install s5-pytorch==0.2.1")
 
 
-class SS4RecOfficial(SequentialRecommender):
+class SS4RecOfficial:
     """
     Official SS4Rec implementation using battle-tested libraries
     
@@ -55,7 +67,16 @@ class SS4RecOfficial(SequentialRecommender):
     """
     
     def __init__(self, config, dataset):
-        super(SS4RecOfficial, self).__init__(config, dataset)
+        # Ensure RecBole imports are available
+        if not _ensure_recbole_imports():
+            raise ImportError("RecBole is required. Install with: uv pip install recbole==1.2.0")
+            
+        # Dynamically inherit from SequentialRecommender
+        if not hasattr(self.__class__, '_recbole_base_initialized'):
+            self.__class__.__bases__ = (SequentialRecommender,)
+            self.__class__._recbole_base_initialized = True
+            
+        super().__init__(config, dataset)
         
         # Model dimensions from config/paper
         self.hidden_size = config.get('hidden_size', 64)

@@ -23,21 +23,29 @@ from typing import Dict, Any
 project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
-try:
-    from recbole.quick_start import run_recbole
-    from recbole.config import Config
-    from recbole.data import create_dataset, data_preparation
-    from recbole.trainer import Trainer
-    from recbole.utils import init_seed, init_logger
-    from models.official_ss4rec import SS4RecOfficial, create_ss4rec_config
-    RECBOLE_AVAILABLE = True
-except ImportError as e:
-    RECBOLE_AVAILABLE = False
-    print(f"❌ RecBole or SS4Rec import failed: {e}")
-    print("Install with: uv pip install recbole==1.2.0")
-    # Define dummy classes to prevent further import errors
-    SS4RecOfficial = None
-    create_ss4rec_config = None
+# Defer RecBole imports until after dependency installation
+RECBOLE_AVAILABLE = False
+SS4RecOfficial = None
+create_ss4rec_config = None
+
+def check_recbole_imports():
+    """Check if RecBole imports are available"""
+    global RECBOLE_AVAILABLE, SS4RecOfficial, create_ss4rec_config
+    try:
+        from recbole.quick_start import run_recbole
+        from recbole.config import Config
+        from recbole.data import create_dataset, data_preparation
+        from recbole.trainer import Trainer
+        from recbole.utils import init_seed, init_logger
+        from models.official_ss4rec import SS4RecOfficial as SS4RecOfficialClass, create_ss4rec_config as create_config
+        SS4RecOfficial = SS4RecOfficialClass
+        create_ss4rec_config = create_config
+        RECBOLE_AVAILABLE = True
+        return True
+    except ImportError as e:
+        print(f"❌ RecBole or SS4Rec import failed: {e}")
+        print("Install with: uv pip install recbole==1.2.0")
+        return False
 
 
 def setup_logging(log_level: str = 'INFO', log_file: str = None):
@@ -66,6 +74,11 @@ def train_ss4rec_official(config_file: str, dataset_path: str = None, output_dir
     """
     if not RECBOLE_AVAILABLE:
         raise ImportError("RecBole is required. Install with: uv pip install recbole==1.2.0")
+    
+    # Import RecBole modules now that we know they're available
+    from recbole.quick_start import run_recbole
+    from recbole.config import Config
+    from recbole.utils import init_seed, init_logger
     
     logging.info("🚀 Starting Official SS4Rec Training")
     
@@ -183,8 +196,8 @@ def main():
     logging.info(f"📂 Output: {args.output_dir}")
     logging.info(f"📝 Log: {log_file}")
     
-    # Check dependencies
-    if not RECBOLE_AVAILABLE:
+    # Check dependencies - try to import RecBole now
+    if not check_recbole_imports():
         logging.error("❌ RecBole not available")
         logging.error("Install with: uv pip install recbole==1.2.0")
         return 1
