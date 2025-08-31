@@ -371,7 +371,10 @@ def create_ss4rec_config(dataset_name: str = 'movielens') -> Dict[str, Any]:
         
         # Device
         'device': 'cuda' if torch.cuda.is_available() else 'cpu',
+        'gpu_id': 0,
+        'local_rank': 0,
         'nproc': 1,
+        'offset': 0,
         'reproducibility': True,
         'seed': 2023,
     }
