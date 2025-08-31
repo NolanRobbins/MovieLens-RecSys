@@ -72,7 +72,8 @@ def train_ss4rec_official(config_file: str, dataset_path: str = None, output_dir
         dataset_path: Path to dataset directory (optional)
         output_dir: Path to output directory for results
     """
-    if not RECBOLE_AVAILABLE:
+    # Check if RecBole imports are available now
+    if not check_recbole_imports():
         raise ImportError("RecBole is required. Install with: uv pip install recbole==1.2.0")
     
     # Import RecBole modules now that we know they're available

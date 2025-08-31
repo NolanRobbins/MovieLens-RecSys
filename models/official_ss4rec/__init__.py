@@ -10,6 +10,19 @@ Usage:
     from models.official_ss4rec import SS4RecOfficial, create_ss4rec_config
 """
 
-from .ss4rec_official import SS4RecOfficial, create_ss4rec_config
+# Defer imports to avoid RecBole dependency issues during import
+def _lazy_import():
+    """Lazy import to avoid issues when RecBole isn't available"""
+    from .ss4rec_official import SS4RecOfficial, create_ss4rec_config
+    return SS4RecOfficial, create_ss4rec_config
+
+# Only import when actually accessed
+def __getattr__(name):
+    if name in ['SS4RecOfficial', 'create_ss4rec_config']:
+        SS4RecOfficial, create_ss4rec_config = _lazy_import()
+        globals()['SS4RecOfficial'] = SS4RecOfficial
+        globals()['create_ss4rec_config'] = create_ss4rec_config
+        return globals()[name]
+    raise AttributeError(f"module {__name__} has no attribute {name}")
 
 __all__ = ['SS4RecOfficial', 'create_ss4rec_config']
