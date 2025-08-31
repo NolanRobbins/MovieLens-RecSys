@@ -48,6 +48,7 @@ eval_args:
   
 # Device and Reproducibility  
 device: cuda                # GPU training
+nproc: 1                    # Number of processes for distributed training
 reproducibility: true       # Ensure reproducible results
 seed: 2023                 # Random seed
 
