@@ -4,9 +4,9 @@ Based on: "SS4Rec: Continuous-Time Sequential Recommendation with State Space Mo
 arXiv: https://arxiv.org/abs/2502.08132
 
 This implementation uses:
-- RecBole 1.0 framework for standard sequential recommendation evaluation
+- RecBole 1.0 framework for standard evaluation
 - Official mamba-ssm==2.2.2 for numerically stable Mamba layers
-- Official s5-pytorch==0.2.1 for stable S5 implementations
+- Custom TimeAwareSSM for time-aware processing (to handle variable dt, as official s5-pytorch does not support per-step dt natively)
 """
 
 import torch
@@ -54,23 +54,100 @@ except ImportError:
     MAMBA_AVAILABLE = False
     print("Warning: mamba-ssm not available. Install with: uv pip install mamba-ssm==2.2.2")
 
-try:
-    from s5 import S5
-    S5_AVAILABLE = True
-except ImportError:
-    S5_AVAILABLE = False
-    print("Warning: s5-pytorch not available. Install with: uv pip install s5-pytorch==0.2.1")
-
+# S5 import removed, as we're replacing with custom TimeAwareSSM
+# try:
+#     from s5 import S5
+#     S5_AVAILABLE = True
+# except ImportError:
+#     S5_AVAILABLE = False
+#     print("Warning: s5-pytorch not available. Install with: uv pip install s5-pytorch==0.2.1")
 
 # Ensure RecBole is imported at module level
 _ensure_recbole_imports()
+
+class TimeAwareSSM(nn.Module):
+    """
+    Custom recurrent SSM for time-aware processing with variable dt per step.
+    Implements diagonal SSM in recurrent mode for short sequences (efficient on GPU since max_seq_len=50).
+    Uses simple real diagonal approximation with HiPPO-like initialization.
+    """
+    def __init__(self, d_model: int, d_state: int = 16, dt_min: float = 0.001, dt_max: float = 0.1):
+        super().__init__()
+        self.d_model = d_model
+        self.d_state = d_state
+        self.dt_min = dt_min
+        self.dt_max = dt_max
+
+        # HiPPO-like initialization for A (negative real values)
+        A_init = -0.5 - torch.arange(0, d_state).float()
+        self.A = nn.Parameter(A_init.repeat(d_model, 1))  # [d_model, d_state]
+
+        # B initialized to ones
+        self.B = nn.Parameter(torch.ones(d_model, d_state))
+
+        # C normal
+        self.C = nn.Parameter(torch.randn(d_model, d_state))
+
+        # D skip connection
+        self.D = nn.Parameter(torch.zeros(d_model))
+
+    def forward(self, u: torch.Tensor, dts: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """
+        Recurrent forward pass with per-step discretization.
+        
+        Args:
+            u: [batch_size, seq_len, d_model]
+            dts: [batch_size, seq_len-1] time intervals (clamped to [dt_min, dt_max])
+            
+        Returns:
+            y: [batch_size, seq_len, d_model]
+        """
+        b, l, d = u.shape
+        device = u.device
+        dtype = u.dtype
+
+        if dts is None:
+            dts = torch.full((b, l-1), 1.0, device=device, dtype=dtype)  # Fixed dt=1 if not provided
+
+        # Clamp dts
+        dts = torch.clamp(dts, self.dt_min, self.dt_max)
+
+        # Initial state
+        x = torch.zeros(b, self.d_model, self.d_state, device=device, dtype=dtype)  # [b, d, n]
+
+        ys = []
+
+        # First step: y0 = D * u0 (since x0=0)
+        y = self.D.unsqueeze(0) * u[:, 0, :]  # [b, d]
+        ys.append(y)
+
+        # Recurrent steps
+        for k in range(1, l):
+            delta = dts[:, k-1].unsqueeze(1).unsqueeze(1)  # [b, 1, 1]
+
+            A_delta = delta * self.A.unsqueeze(0)  # [b, d, n]
+            A_bar = torch.exp(A_delta)  # [b, d, n]
+
+            # B_bar = (A_bar - 1) / (A + eps) * B
+            A_safe = self.A.unsqueeze(0) + 1e-4  # Avoid div by zero (though A < 0)
+            B_bar = (A_bar - 1.0) / A_safe * self.B.unsqueeze(0)  # [b, d, n]
+
+            # x_k = A_bar * x_{k-1} + B_bar * u_{k-1}
+            ux = u[:, k-1, :].unsqueeze(1).unsqueeze(2)  # [b, d, 1]
+            x = A_bar * x + B_bar * ux  # [b, d, n]
+
+            # y_k = C * x_k + D * u_k
+            y = torch.einsum('dn,bdn->bd', self.C, x) + self.D.unsqueeze(0) * u[:, k, :]
+            ys.append(y)
+
+        return torch.stack(ys, dim=1)  # [b, l, d]
 
 class SS4RecOfficial(SequentialRecommender):
     r"""
     Official SS4Rec implementation using RecBole framework
     
     This implementation follows the paper specification exactly:
-    1. Time-Aware SSM using official S5 implementation
+    1. Time-Aware SSM using custom recurrent SSM (for variable dt)
     2. Relation-Aware SSM using official Mamba implementation  
     3. RecBole framework for standard evaluation
     4. BPR loss for sequential ranking task
@@ -130,10 +207,10 @@ class SS4RecOfficial(SequentialRecommender):
         )
         
         # Check if official libraries are available
-        if not MAMBA_AVAILABLE or not S5_AVAILABLE:
+        if not MAMBA_AVAILABLE:
             raise ImportError(
-                "Official SS4Rec requires mamba-ssm and s5-pytorch. "
-                "Install with: uv pip install mamba-ssm==2.2.2 s5-pytorch==0.2.1"
+                "Official SS4Rec requires mamba-ssm. "
+                "Install with: uv pip install mamba-ssm==2.2.2"
             )
         
         # Build SS4Rec layers using official implementations
@@ -144,7 +221,9 @@ class SS4RecOfficial(SequentialRecommender):
                 d_state=self.d_state,
                 d_conv=self.d_conv,
                 expand=self.expand,
-                dropout=self.dropout_prob
+                dropout=self.dropout_prob,
+                dt_min=self.dt_min,
+                dt_max=self.dt_max
             )
             self.ss_layers.append(ss_layer)
         
@@ -182,16 +261,11 @@ class SS4RecOfficial(SequentialRecommender):
         Returns:
             time_intervals: [batch_size, seq_len-1] - Normalized time intervals
         """
-        if timestamps is None:
-            # If no timestamps, use uniform intervals
-            batch_size, seq_len = timestamps.shape
-            return torch.ones(batch_size, seq_len-1, device=timestamps.device)
-        
         # Compute time differences
         time_diffs = timestamps[:, 1:] - timestamps[:, :-1]  # [batch_size, seq_len-1]
         
         # Normalize to [dt_min, dt_max] range
-        time_intervals = torch.clamp(time_diffs, min=self.dt_min, max=self.dt_max)
+        time_intervals = torch.clamp(time_diffs.float(), min=self.dt_min, max=self.dt_max)
         
         # Handle edge cases (zero or negative intervals)
         time_intervals = torch.where(
@@ -228,9 +302,7 @@ class SS4RecOfficial(SequentialRecommender):
         hidden_states = self.dropout(hidden_states)
         
         # 4. Compute time intervals for time-aware processing
-        time_intervals = None
-        if timestamps is not None:
-            time_intervals = self.compute_time_intervals(timestamps)
+        time_intervals = self.compute_time_intervals(timestamps) if timestamps is not None else None
         
         # 5. Process through SS4Rec layers
         for ss_layer in self.ss_layers:
@@ -248,8 +320,9 @@ class SS4RecOfficial(SequentialRecommender):
         item_seq = interaction[self.ITEM_SEQ]
         item_seq_len = interaction[self.ITEM_SEQ_LEN] 
         pos_items = interaction[self.POS_ITEM_ID]
+        timestamps = interaction['timestamp_list']  # RecBole key for timestamp sequences
         
-        seq_output = self.forward(item_seq, item_seq_len)
+        seq_output = self.forward(item_seq, item_seq_len, timestamps)
         pos_items_emb = self.item_embedding(pos_items)
         
         # Get sequence representation (last non-padding position)
@@ -261,7 +334,7 @@ class SS4RecOfficial(SequentialRecommender):
         # Sample negative items for BPR loss
         neg_items = interaction[self.NEG_ITEM_ID]
         neg_items_emb = self.item_embedding(neg_items)
-        neg_scores = torch.sum(seq_repr.unsqueeze(1) * neg_items_emb, dim=-1)
+        neg_scores = torch.sum(seq_repr * neg_items_emb, dim=-1)
         
         # BPR loss
         loss = self.loss_fct(pos_scores, neg_scores)
@@ -274,8 +347,9 @@ class SS4RecOfficial(SequentialRecommender):
         """
         item_seq = interaction[self.ITEM_SEQ]
         item_seq_len = interaction[self.ITEM_SEQ_LEN]
+        timestamps = interaction.get('timestamp_list', None)  # Available in test interactions
         
-        seq_output = self.forward(item_seq, item_seq_len)
+        seq_output = self.forward(item_seq, item_seq_len, timestamps)
         seq_repr = self.gather_indexes(seq_output, item_seq_len - 1)
         
         # Compute scores for all items
@@ -293,24 +367,25 @@ if RECBOLE_AVAILABLE and InputType is not None and ModelType is not None:
 
 class SS4RecLayer(nn.Module):
     """
-    Single SS4Rec layer combining Time-Aware SSM (S5) and Relation-Aware SSM (Mamba)
+    Single SS4Rec layer combining Time-Aware SSM (custom) and Relation-Aware SSM (Mamba)
     
     This follows the hybrid architecture from the paper:
-    1. S5 for time-aware processing of irregular intervals
+    1. Custom TimeAwareSSM for time-aware processing of irregular intervals (recurrent mode)
     2. Mamba for relation-aware contextual dependencies
     """
     
     def __init__(self, d_model: int, d_state: int = 16, d_conv: int = 4, 
-                 expand: int = 2, dropout: float = 0.1):
+                 expand: int = 2, dropout: float = 0.1, dt_min: float = 0.001, dt_max: float = 0.1):
         super().__init__()
         
         self.d_model = d_model
         
-        # Time-Aware SSM using official S5 implementation
-        self.s5_layer = S5(
-            dim=d_model,
-            state_dim=d_state,
-            bidirectional=False  # Causal for sequential recommendation
+        # Time-Aware SSM using custom recurrent implementation
+        self.time_aware_ssm = TimeAwareSSM(
+            d_model=d_model,
+            d_state=d_state,
+            dt_min=dt_min,
+            dt_max=dt_max
         )
         
         # Relation-Aware SSM using official Mamba implementation  
@@ -339,11 +414,10 @@ class SS4RecLayer(nn.Module):
         Returns:
             output: [batch_size, seq_len, d_model] - Processed sequence
         """
-        # 1. Time-Aware processing with S5
-        # Note: Official S5 handles time intervals internally
-        s5_out = self.s5_layer(x)
-        s5_out = self.dropout(s5_out)
-        x = self.norm1(x + s5_out)  # Residual connection
+        # 1. Time-Aware processing with custom SSM
+        ssm_out = self.time_aware_ssm(x, time_intervals)
+        ssm_out = self.dropout(ssm_out)
+        x = self.norm1(x + ssm_out)  # Residual connection
         
         # 2. Relation-Aware processing with Mamba
         mamba_out = self.mamba_layer(x)
@@ -412,7 +486,7 @@ if __name__ == "__main__":
     # Test model initialization
     print("Testing Official SS4Rec Implementation")
     
-    if RECBOLE_AVAILABLE and MAMBA_AVAILABLE and S5_AVAILABLE:
+    if RECBOLE_AVAILABLE and MAMBA_AVAILABLE:
         # Create dummy config and dataset for testing
         class DummyDataset:
             def __init__(self):
@@ -429,4 +503,4 @@ if __name__ == "__main__":
             print(f"❌ Error creating model: {e}")
     else:
         print("❌ Missing required dependencies for full testing")
-        print("Install with: uv pip install recbole==1.2.0 mamba-ssm==2.2.2 s5-pytorch==0.2.1")
+        print("Install with: uv pip install recbole==1.2.0 mamba-ssm==2.2.2")
