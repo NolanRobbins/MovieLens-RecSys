@@ -49,14 +49,11 @@ eval_args:
 # Device and Reproducibility  
 device: cuda                # GPU training
 gpu_id: 0                   # Use GPU 0 (your A6000)
-local_rank: 0               # Local process rank (single GPU)
-nproc: 1                    # Number of processes for distributed training
-world_size: 1               # Total number of processes (single GPU = 1)
-offset: 0                   # GPU offset (start from GPU 0 - your A6000)
-ip: localhost               # Master node IP for distributed training
-port: 29500                 # Port for distributed communication
 reproducibility: true       # Ensure reproducible results
 seed: 2023                 # Random seed
+
+# NOTE: Removed distributed training parameters (nproc, world_size, etc.) 
+# for single-GPU training to avoid "process group initialized twice" error
 
 # Optimization
 scheduler: 'StepLR'         # Learning rate scheduler
