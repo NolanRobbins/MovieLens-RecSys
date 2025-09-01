@@ -37,7 +37,9 @@ def check_recbole_imports():
         from recbole.data import create_dataset, data_preparation
         from recbole.trainer import Trainer
         from recbole.utils import init_seed, init_logger
-        from models.official_ss4rec import SS4RecOfficial as SS4RecOfficialClass, create_ss4rec_config as create_config
+        
+        # Import our custom model
+        from models.official_ss4rec.ss4rec_official import SS4RecOfficial as SS4RecOfficialClass, create_ss4rec_config as create_config
         SS4RecOfficial = SS4RecOfficialClass
         create_ss4rec_config = create_config
         RECBOLE_AVAILABLE = True
@@ -120,8 +122,7 @@ def train_ss4rec_official(config_file: str, dataset_path: str = None, output_dir
         result = run_recbole(
             model=SS4RecOfficial,
             dataset=config['dataset'],
-            config_dict=config.final_config_dict,
-            saved=True
+            config_dict=config.final_config_dict
         )
         
         logging.info("🎉 Training completed successfully!")

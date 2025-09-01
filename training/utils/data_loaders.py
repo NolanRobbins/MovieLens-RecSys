@@ -18,10 +18,10 @@ class MovieLensDataset(Dataset):
         Initialize dataset from DataFrame
         
         Args:
-            df: DataFrame with columns ['user_id', 'movie_id', 'rating']
+            df: DataFrame with columns ['user_idx', 'movie_idx', 'rating']
         """
-        self.users = torch.LongTensor(df['user_id'].values)
-        self.items = torch.LongTensor(df['movie_id'].values) 
+        self.users = torch.LongTensor(df['user_idx'].values)
+        self.items = torch.LongTensor(df['movie_idx'].values) 
         self.ratings = torch.FloatTensor(df['rating'].values)
     
     def __len__(self):
@@ -42,7 +42,7 @@ class SequentialMovieLensDataset(Dataset):
         Initialize sequential dataset
         
         Args:
-            df: DataFrame with columns ['user_id', 'movie_id', 'rating', 'timestamp']
+            df: DataFrame with columns ['user_idx', 'movie_idx', 'rating', 'timestamp']
             max_seq_len: Maximum sequence length
             min_seq_len: Minimum sequence length
         """
@@ -50,17 +50,17 @@ class SequentialMovieLensDataset(Dataset):
         self.min_seq_len = min_seq_len
         
         # Sort by user and timestamp
-        df_sorted = df.sort_values(['user_id', 'timestamp'])
+        df_sorted = df.sort_values(['user_idx', 'timestamp'])
         
         # Group by user to create sequences
         self.user_sequences = []
         self.user_ratings = []
         self.user_timestamps = []
         
-        for user_id, group in df_sorted.groupby('user_id'):
+        for user_idx, group in df_sorted.groupby('user_idx'):
             if len(group) >= min_seq_len:
                 # Get sequences
-                items = group['movie_id'].tolist()
+                items = group['movie_idx'].tolist()
                 ratings = group['rating'].tolist()
                 timestamps = group['timestamp'].tolist()
                 
@@ -106,7 +106,7 @@ def create_data_loaders(train_df: pd.DataFrame,
                        batch_size: int = 1024,
                        num_workers: int = 4,
                        sequential: bool = False,
-                       **kwargs) -> Tuple[DataLoader, DataLoader, DataLoader]:
+                       **kwargs) -> Tuple[DataLoader, DataLoader, Optional[DataLoader]]:
     """
     Create data loaders for training
     
@@ -172,7 +172,12 @@ def create_data_loaders(train_df: pd.DataFrame,
         # Create standard datasets for Neural CF
         train_dataset = MovieLensDataset(train_df)
         val_dataset = MovieLensDataset(val_df)
-        test_dataset = MovieLensDataset(test_df)
+        
+        # Only create test dataset if test_df is not empty
+        if not test_df.empty and len(test_df.columns) > 0:
+            test_dataset = MovieLensDataset(test_df)
+        else:
+            test_dataset = None
         
         train_loader = DataLoader(
             train_dataset,
@@ -190,57 +195,45 @@ def create_data_loaders(train_df: pd.DataFrame,
             pin_memory=True
         )
         
-        test_loader = DataLoader(
-            test_dataset,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=num_workers,
-            pin_memory=True
-        )
+        # Only create test_loader if test_dataset exists
+        if test_dataset is not None:
+            test_loader = DataLoader(
+                test_dataset,
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=num_workers,
+                pin_memory=True
+            )
+        else:
+            test_loader = None
     
     return train_loader, val_loader, test_loader
 
 
-def prepare_movielens_data(data_dir: str, 
-                          min_interactions: int = 20) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def prepare_training_data(data_dir: str = "data/processed") -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Load and prepare MovieLens data with proper splits
+    Load ONLY training and validation data for RunPod training
+    Test data remains unseen until after training completion
     
     Args:
         data_dir: Directory containing processed data
-        min_interactions: Minimum interactions per user/item
         
     Returns:
-        Tuple of (train_df, val_df, test_df)
+        Tuple of (train_df, val_df) - NO test_df during training!
     """
-    # Load data
+    import logging
+    logging.info("Loading training and validation data only...")
+    
+    # Load ONLY train and validation data
     train_df = pd.read_csv(f"{data_dir}/train_data.csv")
-    val_df = pd.read_csv(f"{data_dir}/val_data.csv") 
-    test_df = pd.read_csv(f"{data_dir}/test_data.csv")
+    val_df = pd.read_csv(f"{data_dir}/val_data.csv")
     
-    # Filter by minimum interactions if needed
-    if min_interactions > 0:
-        # Count interactions per user/item
-        all_df = pd.concat([train_df, val_df, test_df])
-        
-        user_counts = all_df['user_id'].value_counts()
-        item_counts = all_df['movie_id'].value_counts()
-        
-        valid_users = user_counts[user_counts >= min_interactions].index
-        valid_items = item_counts[item_counts >= min_interactions].index
-        
-        # Filter datasets
-        train_df = train_df[
-            (train_df['user_id'].isin(valid_users)) & 
-            (train_df['movie_id'].isin(valid_items))
-        ]
-        val_df = val_df[
-            (val_df['user_id'].isin(valid_users)) & 
-            (val_df['movie_id'].isin(valid_items))
-        ]
-        test_df = test_df[
-            (test_df['user_id'].isin(valid_users)) & 
-            (test_df['movie_id'].isin(valid_items))
-        ]
+    # Verify column formats
+    required_cols = ['user_idx', 'movie_idx', 'rating']
+    for df_name, df in [("train", train_df), ("val", val_df)]:
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            raise ValueError(f"Missing columns in {df_name}_data.csv: {missing_cols}")
     
-    return train_df, val_df, test_df
+    logging.info(f"Loaded train: {len(train_df):,} samples, val: {len(val_df):,} samples")
+    return train_df, val_df

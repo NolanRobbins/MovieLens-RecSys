@@ -504,13 +504,43 @@ if config.gpu_id is not None and config.world_size == 1:
 ### **Current Status**: 
 - ✅ All previous import and dependency issues resolved
 - ✅ All RecBole parameters configured  
-- ✅ **FIXED**: Distributed process group initialization conflict (removed distributed params from config)
+- ✅ **FIXED**: Distributed process group initialization conflict (added required params: nproc=1, world_size=1, etc.)
 - ✅ **FIXED**: S5-pytorch import issues (corrected imports to use `from s5_pytorch import S5`)
 - 🚀 **READY**: SS4Rec official implementation ready for RunPod training
 
 **Latest Fixes Applied**:
-1. **RecBole Configuration**: Removed distributed training parameters from `configs/official/ss4rec_official.yaml` to prevent "process group initialized twice" error
-2. **Import Fixes**: Corrected s5-pytorch imports to use `from s5 import S5` (verified via web search of official docs)
-3. **All Dependencies**: Verified and aligned with requirements_ss4rec.txt specifications
+1. **RecBole Configuration**: Added distributed training parameters (`nproc: 1`, `world_size: 1`, `offset: 0`, `ip: localhost`, `port: 29500`) to `configs/official/ss4rec_official.yaml` to prevent KeyError
+2. **Model Registration**: Updated `SS4RecOfficial` class to properly inherit from `SequentialRecommender` with correct RecBole interface
+3. **Import Fixes**: Corrected s5-pytorch imports to use `from s5 import S5` (verified via web search of official docs)
+4. **All Dependencies**: Verified and aligned with requirements_ss4rec.txt specifications
+
+## 🌟 **GUIDING REFERENCE: SS4Rec Paper & Implementation**
+
+**📄 Paper**: SS4Rec: Continuous-Time Sequential Recommendation with State Space Models  
+**🔗 arXiv**: https://arxiv.org/abs/2502.08132  
+**👥 Authors**: Wei Xiao, Huiying Wang, Qifeng Zhou, Qing Wang  
+
+### **⚠️ CRITICAL DEVELOPMENT PRINCIPLE**:
+**The SS4Rec paper (arXiv:2502.08132) and its methodology serve as the DEFINITIVE GUIDE for all future model training fixes, architectural decisions, and implementation details.**
+
+### **Key SS4Rec Architecture from Paper**:
+1. **Time-Aware SSM**: Handles irregular time intervals using official S5 implementation
+2. **Relation-Aware SSM**: Models contextual dependencies using official Mamba implementation
+3. **Hybrid SSM Approach**: Combines both SSMs for capturing temporal AND sequential perspectives
+4. **Continuous-Time System**: Treats user interest evolution as continuous time-varying system
+5. **Variable Discretization**: Uses adaptive timesteps based on time intervals and input data
+
+### **Implementation Requirements from Paper**:
+- **RecBole Framework**: Standard sequential recommendation evaluation protocol
+- **BPR Loss**: Bayesian Personalized Ranking for ranking task (as per paper)
+- **Standard Metrics**: HR@K, NDCG@K, MRR@K (industry standard evaluation)
+- **Paper Benchmarks**: Target HR@10 >0.30, NDCG@10 >0.25
+- **Official Libraries**: mamba-ssm==2.2.2, s5-pytorch==0.2.1 for numerical stability
+
+### **🚨 ALL FUTURE FIXES MUST**:
+1. **Reference Paper Methodology**: Every architectural decision must align with SS4Rec paper specifications
+2. **Maintain Paper Fidelity**: Implementation must remain faithful to research findings
+3. **Follow Paper Benchmarks**: Performance targets based on paper's experimental results
+4. **Use Official Dependencies**: Only battle-tested libraries mentioned in requirements
 
 ---

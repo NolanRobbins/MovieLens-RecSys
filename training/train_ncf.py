@@ -22,8 +22,8 @@ import argparse
 sys.path.append(str(Path(__file__).parent.parent))
 
 from models.baseline.neural_cf import NeuralCollaborativeFiltering
-from src.data.etl_pipeline import load_processed_data
-from training.utils.data_loaders import MovieLensDataset, create_data_loaders
+# from src.data.etl_pipeline import load_processed_data
+from training.utils.data_loaders import MovieLensDataset, create_data_loaders, prepare_training_data
 from training.utils.metrics import compute_metrics, log_metrics
 
 
@@ -35,6 +35,9 @@ class NCFTrainer:
         self.config = self._load_config(config_path)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.setup_logging()
+        
+        # W&B integration
+        self.wandb_run = None  # Will be set externally if W&B is enabled
         
         # A6000 optimizations
         if torch.cuda.is_available():
@@ -63,26 +66,25 @@ class NCFTrainer:
         self.logger = logging.getLogger(__name__)
     
     def prepare_data(self):
-        """Load and prepare MovieLens data"""
-        self.logger.info("Loading MovieLens dataset...")
+        """Load and prepare ONLY training and validation data"""
+        self.logger.info("Loading training and validation data only...")
+        self.logger.info("⚠️  Test data remains UNSEEN until after training completion!")
         
-        # Load processed data
+        # Load ONLY train and validation data
         data_dir = Path(self.config['paths']['data_dir'])
-        train_df = pd.read_csv(data_dir / 'train_data.csv')
-        val_df = pd.read_csv(data_dir / 'val_data.csv')
-        test_df = pd.read_csv(data_dir / 'test_data.csv')
+        train_df, val_df = prepare_training_data(str(data_dir))
         
-        # Get unique counts
-        self.n_users = max(train_df['user_id'].max(), val_df['user_id'].max(), test_df['user_id'].max()) + 1
-        self.n_items = max(train_df['movie_id'].max(), val_df['movie_id'].max(), test_df['movie_id'].max()) + 1
+        # Get unique counts from ONLY training and validation data
+        self.n_users = max(train_df['user_idx'].max(), val_df['user_idx'].max()) + 1
+        self.n_items = max(train_df['movie_idx'].max(), val_df['movie_idx'].max()) + 1
         
-        self.logger.info(f"Dataset: {len(train_df)} train, {len(val_df)} val, {len(test_df)} test")
+        self.logger.info(f"Dataset: {len(train_df)} train, {len(val_df)} val")
         self.logger.info(f"Users: {self.n_users}, Items: {self.n_items}")
         
-        # Create data loaders
-        self.train_loader, self.val_loader, self.test_loader = create_data_loaders(
-            train_df, val_df, test_df,
-            batch_size=self.config['training']['batch_size'],
+        # Create data loaders for ONLY train and validation
+        self.train_loader, self.val_loader, _ = create_data_loaders(
+            train_df, val_df, pd.DataFrame(),  # Empty test_df
+            batch_size=int(self.config['training']['batch_size']),
             num_workers=4
         )
     
@@ -102,7 +104,17 @@ class NCFTrainer:
         if self.config['gpu']['compile']:
             self.model = torch.compile(self.model)
         
-        self.logger.info(f"Model created with {sum(p.numel() for p in self.model.parameters())} parameters")
+        total_params = sum(p.numel() for p in self.model.parameters())
+        self.logger.info(f"Model created with {total_params} parameters")
+        
+        # Log model architecture to W&B
+        if self.wandb_run:
+            self.wandb_run.log({
+                "model/total_parameters": total_params,
+                "model/mf_dim": model_config['mf_dim'],
+                "model/mlp_dims": str(model_config['mlp_dims']),
+                "model/dropout_rate": model_config['dropout_rate']
+            })
     
     def setup_training(self):
         """Setup optimizer, scheduler, and loss function"""
@@ -111,8 +123,8 @@ class NCFTrainer:
         if optimizer_config['type'] == 'adam':
             self.optimizer = optim.Adam(
                 self.model.parameters(),
-                lr=self.config['training']['learning_rate'],
-                weight_decay=optimizer_config['weight_decay']
+                lr=float(self.config['training']['learning_rate']),
+                weight_decay=float(optimizer_config['weight_decay'])
             )
         
         # Scheduler
@@ -121,9 +133,9 @@ class NCFTrainer:
             self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
                 self.optimizer,
                 mode='min',
-                factor=scheduler_config['factor'],
-                patience=scheduler_config['patience'],
-                min_lr=scheduler_config['min_lr']
+                factor=float(scheduler_config['factor']),
+                patience=int(scheduler_config['patience']),
+                min_lr=float(scheduler_config['min_lr'])
             )
         
         # Loss function
@@ -204,12 +216,23 @@ class NCFTrainer:
         
         best_val_rmse = float('inf')
         patience_counter = 0
+        epoch = -1  # Initialize epoch variable
         
         # Create model directory
         model_dir = Path(self.config['paths']['model_dir'])
         model_dir.mkdir(parents=True, exist_ok=True)
         
-        for epoch in range(self.config['training']['epochs']):
+        # Log training start to W&B
+        if self.wandb_run:
+            self.wandb_run.log({
+                "training/started": True,
+                "training/total_epochs": int(self.config['training']['epochs']),
+                "training/batch_size": int(self.config['training']['batch_size']),
+                "training/learning_rate": float(self.config['training']['learning_rate']),
+                "training/early_stopping_patience": int(self.config['training']['early_stopping']['patience'])
+            })
+        
+        for epoch in range(int(self.config['training']['epochs'])):
             start_time = time.time()
             
             # Train
@@ -225,10 +248,28 @@ class NCFTrainer:
             epoch_time = time.time() - start_time
             
             # Log metrics
-            self.logger.info(f"Epoch {epoch+1}/{self.config['training']['epochs']}")
+            self.logger.info(f"Epoch {epoch+1}/{int(self.config['training']['epochs'])}")
             self.logger.info(f"Train Loss: {train_loss:.4f}")
             self.logger.info(f"Val Loss: {val_metrics['val_loss']:.4f}, Val RMSE: {val_metrics['rmse']:.4f}")
             self.logger.info(f"Epoch Time: {epoch_time:.2f}s")
+            
+            # W&B logging
+            if self.wandb_run:
+                wandb_metrics = {
+                    "epoch": epoch + 1,
+                    "train_loss": train_loss,
+                    "val_loss": val_metrics['val_loss'],
+                    "val_rmse": val_metrics['rmse'],
+                    "epoch_time": epoch_time,
+                    "learning_rate": self.optimizer.param_groups[0]['lr'],
+                    "best_val_rmse": best_val_rmse
+                }
+                # Add additional metrics if available
+                for key, value in val_metrics.items():
+                    if key not in wandb_metrics:
+                        wandb_metrics[f"val_{key}"] = value
+                
+                self.wandb_run.log(wandb_metrics)
             
             # Early stopping
             if val_metrics['rmse'] < best_val_rmse:
@@ -250,12 +291,12 @@ class NCFTrainer:
                 patience_counter += 1
             
             # Early stopping check
-            if patience_counter >= self.config['training']['early_stopping']['patience']:
+            if patience_counter >= int(self.config['training']['early_stopping']['patience']):
                 self.logger.info(f"Early stopping triggered after {epoch+1} epochs")
                 break
             
             # Checkpoint saving
-            if (epoch + 1) % self.config['logging']['checkpoint_freq'] == 0:
+            if (epoch + 1) % int(self.config['logging']['checkpoint_freq']) == 0:
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': self.model.state_dict(),
@@ -265,6 +306,16 @@ class NCFTrainer:
                 }, model_dir / f'checkpoint_epoch_{epoch+1}.pt')
         
         self.logger.info(f"Training completed. Best validation RMSE: {best_val_rmse:.4f}")
+        
+        # Log final results to W&B
+        if self.wandb_run:
+            self.wandb_run.log({
+                "final/best_val_rmse": best_val_rmse,
+                "final/total_epochs_trained": epoch + 1,
+                "final/early_stopped": patience_counter >= int(self.config['training']['early_stopping']['patience']),
+                "final/training_completed": True
+            })
+        
         return best_val_rmse
 
 

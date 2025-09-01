@@ -55,31 +55,32 @@ except ImportError:
     print("Warning: s5-pytorch not available. Install with: uv pip install s5-pytorch==0.2.1")
 
 
-class SS4RecOfficial:
-    """
-    Official SS4Rec implementation using battle-tested libraries
+# Ensure RecBole is imported at module level
+_ensure_recbole_imports()
+
+class SS4RecOfficial(SequentialRecommender):
+    r"""
+    Official SS4Rec implementation using RecBole framework
     
     This implementation follows the paper specification exactly:
     1. Time-Aware SSM using official S5 implementation
     2. Relation-Aware SSM using official Mamba implementation  
     3. RecBole framework for standard evaluation
     4. BPR loss for sequential ranking task
+    
+    Paper: SS4Rec: Continuous-Time Sequential Recommendation with State Space Models
+    arXiv: https://arxiv.org/abs/2502.08132
     """
     
-    # Required by RecBole framework
-    type = "SEQUENTIAL"
+    # Required by RecBole - specify input type for loss computation
+    input_type = 'sequential'
     
     def __init__(self, config, dataset):
-        # Ensure RecBole imports are available
-        if not _ensure_recbole_imports():
+        # Ensure all dependencies are available
+        if not RECBOLE_AVAILABLE:
             raise ImportError("RecBole is required. Install with: uv pip install recbole==1.2.0")
             
-        # Dynamically inherit from SequentialRecommender
-        if not hasattr(self.__class__, '_recbole_base_initialized'):
-            self.__class__.__bases__ = (SequentialRecommender,)
-            self.__class__._recbole_base_initialized = True
-            
-        super().__init__(config, dataset)
+        super(SS4RecOfficial, self).__init__(config, dataset)
         
         # Model dimensions from config/paper
         self.hidden_size = config.get('hidden_size', 64)
