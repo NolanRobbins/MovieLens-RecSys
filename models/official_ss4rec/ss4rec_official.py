@@ -6,7 +6,7 @@ arXiv: https://arxiv.org/abs/2502.08132
 This implementation uses:
 - RecBole 1.0 framework for standard evaluation
 - Official mamba-ssm==2.2.2 for numerically stable Mamba layers
-- Custom TimeAwareSSM for time-aware processing (to handle variable dt, as official s5-pytorch does not support per-step dt natively)
+- Custom TimeAwareSSM for time-aware processing (to handle variable dt)
 """
 
 import torch
@@ -15,55 +15,15 @@ import torch.nn.functional as F
 from typing import Dict, Any, Optional, Tuple
 import numpy as np
 
-# Defer RecBole imports to avoid import issues during dependency check
-RECBOLE_AVAILABLE = False
-SequentialRecommender = None
-BPRLoss = None
-InputType = None
-ModelType = None
-
-def _ensure_recbole_imports():
-    """Ensure RecBole imports are available"""
-    global RECBOLE_AVAILABLE, SequentialRecommender, BPRLoss, InputType, ModelType
-    if RECBOLE_AVAILABLE:
-        return True
-        
-    try:
-        from recbole.model.sequential_recommender import SequentialRecommender as SR
-        from recbole.model.loss import BPRLoss as Loss
-        from recbole.utils import InputType as IT, ModelType as MT
-        SequentialRecommender = SR
-        BPRLoss = Loss
-        InputType = IT
-        ModelType = MT
-        RECBOLE_AVAILABLE = True
-        return True
-    except ImportError:
-        # Fallback for development without RecBole
-        SequentialRecommender = nn.Module
-        BPRLoss = nn.Module
-        InputType = None
-        ModelType = None
-        RECBOLE_AVAILABLE = False
-        return False
+from recbole.model.sequential_recommender import SequentialRecommender
+from recbole.model.loss import BPRLoss
+from recbole.utils import InputType, ModelType
 
 try:
     from mamba_ssm import Mamba
     MAMBA_AVAILABLE = True
 except ImportError:
     MAMBA_AVAILABLE = False
-    print("Warning: mamba-ssm not available. Install with: uv pip install mamba-ssm==2.2.2")
-
-# S5 import removed, as we're replacing with custom TimeAwareSSM
-# try:
-#     from s5 import S5
-#     S5_AVAILABLE = True
-# except ImportError:
-#     S5_AVAILABLE = False
-#     print("Warning: s5-pytorch not available. Install with: uv pip install s5-pytorch==0.2.1")
-
-# Ensure RecBole is imported at module level
-_ensure_recbole_imports()
 
 class TimeAwareSSM(nn.Module):
     """
@@ -133,11 +93,11 @@ class TimeAwareSSM(nn.Module):
             B_bar = (A_bar - 1.0) / A_safe * self.B.unsqueeze(0)  # [b, d, n]
 
             # x_k = A_bar * x_{k-1} + B_bar * u_{k-1}
-            ux = u[:, k-1, :].unsqueeze(1).unsqueeze(2)  # [b, d, 1]
+            ux = u[:, k-1, :].unsqueeze(-1)  # [b, d, 1]
             x = A_bar * x + B_bar * ux  # [b, d, n]
 
             # y_k = C * x_k + D * u_k
-            y = torch.einsum('dn,bdn->bd', self.C, x) + self.D.unsqueeze(0) * u[:, k, :]
+            y = torch.einsum('bdn,dn->bd', x, self.C) + self.D.unsqueeze(0) * u[:, k, :]
             ys.append(y)
 
         return torch.stack(ys, dim=1)  # [b, l, d]
@@ -156,24 +116,17 @@ class SS4RecOfficial(SequentialRecommender):
     arXiv: https://arxiv.org/abs/2502.08132
     """
     
-    # Required by RecBole - specify model type for configuration
-    type = None  # Will be set after imports
+    input_type = InputType.PAIRWISE
+    type = ModelType.SEQUENTIAL
     
     def __init__(self, config, dataset):
-        # Ensure all dependencies are available
-        if not RECBOLE_AVAILABLE:
-            raise ImportError("RecBole is required. Install with: uv pip install recbole==1.2.0")
-            
-        super(SS4RecOfficial, self).__init__(config, dataset)
+        super().__init__(config, dataset)
         
-        # Set input type for BPR loss (pairwise: pos_item, neg_item)
-        if InputType is not None:
-            self.input_type = InputType.PAIRWISE
-        else:
-            # Fallback if InputType not available
-            from recbole.utils import InputType
-            self.input_type = InputType.PAIRWISE
-
+        if not MAMBA_AVAILABLE:
+            raise ImportError(
+                "Official SS4Rec requires mamba-ssm. "
+                "Install with: uv pip install mamba-ssm==2.2.2"
+            )
         
         # Model dimensions from config/paper
         self.hidden_size = config.get('hidden_size', 64)
@@ -205,13 +158,6 @@ class SS4RecOfficial(SequentialRecommender):
         self.position_embedding = nn.Embedding(
             self.max_seq_length, self.hidden_size
         )
-        
-        # Check if official libraries are available
-        if not MAMBA_AVAILABLE:
-            raise ImportError(
-                "Official SS4Rec requires mamba-ssm. "
-                "Install with: uv pip install mamba-ssm==2.2.2"
-            )
         
         # Build SS4Rec layers using official implementations
         self.ss_layers = nn.ModuleList()
@@ -359,12 +305,6 @@ class SS4RecOfficial(SequentialRecommender):
         return scores
 
 
-# Set class attributes after class definition and imports
-if RECBOLE_AVAILABLE and InputType is not None and ModelType is not None:
-    SS4RecOfficial.input_type = InputType.PAIRWISE
-    SS4RecOfficial.type = ModelType.SEQUENTIAL
-
-
 class SS4RecLayer(nn.Module):
     """
     Single SS4Rec layer combining Time-Aware SSM (custom) and Relation-Aware SSM (Mamba)
@@ -486,21 +426,17 @@ if __name__ == "__main__":
     # Test model initialization
     print("Testing Official SS4Rec Implementation")
     
-    if RECBOLE_AVAILABLE and MAMBA_AVAILABLE:
-        # Create dummy config and dataset for testing
-        class DummyDataset:
-            def __init__(self):
-                self.field2token_id = {'item_id': {'<pad>': 0}}
-                
-        config = create_ss4rec_config()
-        dataset = DummyDataset()
-        
-        try:
-            model = SS4RecOfficial(config, dataset)
-            print("✅ SS4RecOfficial model created successfully")
-            print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}")
-        except Exception as e:
-            print(f"❌ Error creating model: {e}")
-    else:
-        print("❌ Missing required dependencies for full testing")
-        print("Install with: uv pip install recbole==1.2.0 mamba-ssm==2.2.2")
+    # Create dummy config and dataset for testing
+    class DummyDataset:
+        def __init__(self):
+            self.field2token_id = {'item_id': {'<pad>': 0}}
+            
+    config = create_ss4rec_config()
+    dataset = DummyDataset()
+    
+    try:
+        model = SS4RecOfficial(config, dataset)
+        print("✅ SS4RecOfficial model created successfully")
+        print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}")
+    except Exception as e:
+        print(f"❌ Error creating model: {e}")
