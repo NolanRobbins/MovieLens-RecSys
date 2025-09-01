@@ -4,7 +4,7 @@ Based on: "SS4Rec: Continuous-Time Sequential Recommendation with State Space Mo
 arXiv: https://arxiv.org/abs/2502.08132
 
 This implementation uses:
-- RecBole 1.0 framework for standard evaluation
+- RecBole 1.2.0 framework for standard evaluation
 - Official mamba-ssm==2.2.2 for numerically stable Mamba layers
 - Custom TimeAwareSSM for time-aware processing (to handle variable dt)
 """
@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from typing import Dict, Any, Optional, Tuple
 import numpy as np
 
-from recbole.model.sequential_recommender import SequentialRecommender
+from recbole.model.abstract_recommender import SequentialRecommender
 from recbole.model.loss import BPRLoss
 from recbole.utils import InputType, ModelType
 
