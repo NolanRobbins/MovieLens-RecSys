@@ -20,20 +20,22 @@ RECBOLE_AVAILABLE = False
 SequentialRecommender = None
 BPRLoss = None
 InputType = None
+ModelType = None
 
 def _ensure_recbole_imports():
     """Ensure RecBole imports are available"""
-    global RECBOLE_AVAILABLE, SequentialRecommender, BPRLoss, InputType
+    global RECBOLE_AVAILABLE, SequentialRecommender, BPRLoss, InputType, ModelType
     if RECBOLE_AVAILABLE:
         return True
         
     try:
         from recbole.model.sequential_recommender import SequentialRecommender as SR
         from recbole.model.loss import BPRLoss as Loss
-        from recbole.utils import InputType as IT
+        from recbole.utils import InputType as IT, ModelType as MT
         SequentialRecommender = SR
         BPRLoss = Loss
         InputType = IT
+        ModelType = MT
         RECBOLE_AVAILABLE = True
         return True
     except ImportError:
@@ -41,6 +43,7 @@ def _ensure_recbole_imports():
         SequentialRecommender = nn.Module
         BPRLoss = nn.Module
         InputType = None
+        ModelType = None
         RECBOLE_AVAILABLE = False
         return False
 
@@ -75,6 +78,9 @@ class SS4RecOfficial(SequentialRecommender):
     Paper: SS4Rec: Continuous-Time Sequential Recommendation with State Space Models
     arXiv: https://arxiv.org/abs/2502.08132
     """
+    
+    # Required by RecBole - specify model type for configuration
+    type = None  # Will be set after imports
     
     def __init__(self, config, dataset):
         # Ensure all dependencies are available
@@ -279,9 +285,10 @@ class SS4RecOfficial(SequentialRecommender):
         return scores
 
 
-# Set input_type as class attribute after class definition
-if RECBOLE_AVAILABLE and InputType is not None:
+# Set class attributes after class definition and imports
+if RECBOLE_AVAILABLE and InputType is not None and ModelType is not None:
     SS4RecOfficial.input_type = InputType.PAIRWISE
+    SS4RecOfficial.type = ModelType.SEQUENTIAL
 
 
 class SS4RecLayer(nn.Module):
