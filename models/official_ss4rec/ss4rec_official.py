@@ -19,24 +19,28 @@ import numpy as np
 RECBOLE_AVAILABLE = False
 SequentialRecommender = None
 BPRLoss = None
+InputType = None
 
 def _ensure_recbole_imports():
     """Ensure RecBole imports are available"""
-    global RECBOLE_AVAILABLE, SequentialRecommender, BPRLoss
+    global RECBOLE_AVAILABLE, SequentialRecommender, BPRLoss, InputType
     if RECBOLE_AVAILABLE:
         return True
         
     try:
         from recbole.model.sequential_recommender import SequentialRecommender as SR
         from recbole.model.loss import BPRLoss as Loss
+        from recbole.utils import InputType as IT
         SequentialRecommender = SR
         BPRLoss = Loss
+        InputType = IT
         RECBOLE_AVAILABLE = True
         return True
     except ImportError:
         # Fallback for development without RecBole
         SequentialRecommender = nn.Module
         BPRLoss = nn.Module
+        InputType = None
         RECBOLE_AVAILABLE = False
         return False
 
@@ -72,15 +76,21 @@ class SS4RecOfficial(SequentialRecommender):
     arXiv: https://arxiv.org/abs/2502.08132
     """
     
-    # Required by RecBole - specify input type for loss computation
-    input_type = 'sequential'
-    
     def __init__(self, config, dataset):
         # Ensure all dependencies are available
         if not RECBOLE_AVAILABLE:
             raise ImportError("RecBole is required. Install with: uv pip install recbole==1.2.0")
             
         super(SS4RecOfficial, self).__init__(config, dataset)
+        
+        # Set input type for BPR loss (pairwise: pos_item, neg_item)
+        if InputType is not None:
+            self.input_type = InputType.PAIRWISE
+        else:
+            # Fallback if InputType not available
+            from recbole.utils import InputType
+            self.input_type = InputType.PAIRWISE
+
         
         # Model dimensions from config/paper
         self.hidden_size = config.get('hidden_size', 64)
@@ -267,6 +277,11 @@ class SS4RecOfficial(SequentialRecommender):
         scores = torch.matmul(seq_repr, all_item_emb.transpose(0, 1))  # [batch_size, n_items]
         
         return scores
+
+
+# Set input_type as class attribute after class definition
+if RECBOLE_AVAILABLE and InputType is not None:
+    SS4RecOfficial.input_type = InputType.PAIRWISE
 
 
 class SS4RecLayer(nn.Module):
