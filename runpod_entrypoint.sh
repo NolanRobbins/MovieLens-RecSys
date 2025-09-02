@@ -179,12 +179,12 @@ download_recbole_data() {
     
     # TODO: Replace with your actual Google Drive download links
     # You'll need to replace these URLs with the actual Google Drive download links
-    local GDRIVE_INTER_URL="https://drive.google.com/uc?export=download&id=1HsS87bMnAkomOzBa3IdxbWeintPnao0C"
+    local GDRIVE_INTER_URL="https://drive.google.com/uc?export=download&id=1Scz4kDtohppr95vb96lM1XgBm2S1Yyds"
     local GDRIVE_CONFIG_URL="https://drive.google.com/uc?export=download&id=1Uxe42ENupS6cM5GYDxgARdx-ucPJzPof"
     local GDRIVE_STATS_URL="https://drive.google.com/uc?export=download&id=1dVKkIuDZrMFBahKLLKmhvoG1gs4-ayVG"
     
     # Download interaction file (.inter) using gdown (same method that worked for 1.3GB train_data.csv)
-    log "📥 Downloading movielens.inter (~400MB)..."
+    log "📥 Downloading movielens.inter (~495MB)..."
     
     # Install gdown if not available (exactly like the working implementation)
     if ! command -v gdown >/dev/null 2>&1; then
