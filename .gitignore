@@ -70,3 +70,5 @@ data/raw/*.parquet
 # RecBole format data files (large, can be regenerated)
 data/recbole_format/*.inter
 data/recbole_format/*.json
+# Ensure movielens subdirectory is ignored
+data/recbole_format/movielens/

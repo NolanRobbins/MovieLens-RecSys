@@ -96,8 +96,8 @@ def test_data_conversion():
     logging.info("🧪 Testing Data Conversion")
     
     try:
-        # Check if converted data exists
-        recbole_data = project_root / 'data' / 'recbole_format' / 'movielens.inter'
+        # Check if converted data exists - Updated for new subdirectory structure
+        recbole_data = project_root / 'data' / 'recbole_format' / 'movielens' / 'movielens.inter'
         if recbole_data.exists():
             logging.info("✅ RecBole format data already exists")
             

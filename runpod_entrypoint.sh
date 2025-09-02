@@ -146,10 +146,10 @@ fi
 
 # Download RecBole format data (train+val combined, test excluded for future ETL)
 download_recbole_data() {
-    local data_dir="data/recbole_format"
+    local data_dir="data/recbole_format/movielens"
     local inter_file="$data_dir/movielens.inter"
-    local config_file="$data_dir/movielens_recbole_config.yaml"
-    local stats_file="$data_dir/movielens_stats.json"
+    local config_file="data/recbole_format/movielens_recbole_config.yaml"
+    local stats_file="data/recbole_format/movielens_stats.json"
     
     log "📊 Checking RecBole format data..."
     

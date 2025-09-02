@@ -3,10 +3,10 @@
 # Generated automatically from MovieLens processed data
 
 # Dataset Information  
-n_users: 170429
-n_items: 48680  
-n_interactions: 20480050
-sparsity: 0.997531
+n_users: 165946
+n_items: 34271  
+n_interactions: 5112603
+sparsity: 0.999101
 
 # Sequential Parameters
 MAX_ITEM_LIST_LENGTH: 50  # Adaptive max length
@@ -15,9 +15,9 @@ MAX_ITEM_LIST_LENGTH: 50  # Adaptive max length
 field_separator: "\t"
 seq_separator: " "
 
-# Load Configuration
+# Load Configuration - NEW SCHEMA: user_id, item_id, rating, timestamp
 load_col:
-  inter: [user_id, item_id, timestamp]
+  inter: [user_id, item_id, rating, timestamp]
   
 # Evaluation
 eval_args:

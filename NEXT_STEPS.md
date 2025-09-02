@@ -639,3 +639,5 @@ models/sota_2025/
 4. **Use Official Dependencies**: Only battle-tested libraries mentioned in requirements
 
 ---
+
+The movielens.inter data file should have a schema of "user_id, item_id, rating, timestamp" -> NEED TO FIX

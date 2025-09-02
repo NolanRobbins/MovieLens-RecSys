@@ -24,6 +24,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
+import shutil  # Added for file moving
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
@@ -67,7 +68,6 @@ def check_dependencies() -> bool:
     required_packages = [
         ('torch', 'PyTorch'),
         ('mamba_ssm', 'Mamba SSM'),
-        ('s5', 'S5 PyTorch'),
         ('causal_conv1d', 'Causal Conv1D'),
         ('wandb', 'Weights & Biases'),
         ('ray', 'Ray'),
@@ -144,18 +144,36 @@ def prepare_data():
     logging.info("📊 Preparing data in RecBole format...")
     
     try:
-        # Check if RecBole format data already exists
-        recbole_data = project_root / 'data' / 'recbole_format' / 'movielens.inter'
+        # Define the target path in RecBole-required structure: {data_path}/{dataset}/{dataset}.inter
+        dataset_dir = project_root / 'data' / 'recbole_format' / 'movielens'
+        recbole_data = dataset_dir / 'movielens.inter'
+        
         if recbole_data.exists():
-            logging.info("✅ RecBole format data already exists")
+            logging.info("✅ RecBole format data already exists in correct structure")
             return True
         
-        # Run data conversion
+        # Create directories if needed
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Run data conversion (assumes converter creates movielens.inter in data/recbole_format)
         converter_script = project_root / 'data' / 'recbole_format' / 'movielens_adapter.py'
+        if not converter_script.exists():
+            logging.error(f"❌ Converter script not found: {converter_script}")
+            return False
+            
         cmd = [sys.executable, str(converter_script)]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         
-        logging.info("✅ Data conversion completed")
+        # After conversion, move the generated file to the dataset subdirectory
+        generated_file = project_root / 'data' / 'recbole_format' / 'movielens.inter'
+        if generated_file.exists():
+            shutil.move(str(generated_file), str(recbole_data))
+            logging.info(f"✅ Moved {generated_file.name} to {dataset_dir}")
+        else:
+            logging.error(f"❌ Converted file not found: {generated_file}")
+            return False
+        
+        logging.info("✅ Data preparation completed")
         return True
         
     except subprocess.CalledProcessError as e:
@@ -279,10 +297,11 @@ def main():
             if not prepare_data():
                 raise RuntimeError("Failed to prepare data")
         
-        # Check if data exists
-        recbole_data = project_root / 'data' / 'recbole_format' / 'movielens.inter'
+        # Check if data exists (updated to check the subdirectory structure)
+        dataset_dir = project_root / 'data' / 'recbole_format' / 'movielens'
+        recbole_data = dataset_dir / 'movielens.inter'
         if not recbole_data.exists():
-            logging.error("❌ RecBole format data not found")
+            logging.error("❌ RecBole format data not found in expected structure")
             logging.info("💡 Run with --prepare-data to convert data automatically")
             return 1
         

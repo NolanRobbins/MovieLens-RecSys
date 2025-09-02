@@ -27,7 +27,7 @@ internal temporal splitting for sequential recommendation evaluation:
    - This enables realistic temporal evaluation of model on unseen future data
 
 RecBole Format Requirements:
-- .inter file with columns: user_id:token, item_id:token, timestamp:float
+- .inter file with columns: user_id:token, item_id:token, rating:float, timestamp:float
 - Sequential ordering by user and timestamp
 - Leave-one-out evaluation protocol
 - Standard RecSys evaluation metrics
@@ -140,21 +140,38 @@ def convert_to_recbole_format(data: pd.DataFrame, output_dir: str, dataset_name:
     user_col = getattr(data, '_user_col', 'user_id')
     item_col = getattr(data, '_item_col', 'movie_id')
     
-    # Create RecBole interaction file - handle missing timestamp
+    # Create RecBole interaction file - ALWAYS include rating column as per NEXT_STEPS.md schema
+    rating_col = 'rating' if 'rating' in data.columns else None
+    
+    # Ensure rating column exists - required for new schema: user_id, item_id, rating, timestamp
+    if rating_col is None:
+        logging.error("❌ Rating column is required but not found in data")
+        logging.error(f"Available columns: {list(data.columns)}")
+        raise ValueError("Rating column is required for the new schema: user_id, item_id, rating, timestamp")
+    
     if 'timestamp' in data.columns:
-        recbole_data = data[[user_col, item_col, 'timestamp']].copy()
+        recbole_data = data[[user_col, item_col, rating_col, 'timestamp']].copy()
     else:
         # Create synthetic timestamps based on rating order
         logging.warning("No timestamp column found, creating synthetic timestamps")
-        recbole_data = data[[user_col, item_col]].copy()
+        recbole_data = data[[user_col, item_col, rating_col]].copy()
         recbole_data['timestamp'] = range(len(recbole_data))
     
-    # Rename columns to RecBole format
-    recbole_data.columns = ['user_id', 'item_id', 'timestamp']
+    # Rename columns to RecBole format - NEW SCHEMA: user_id, item_id, rating, timestamp
+    recbole_data.columns = ['user_id', 'item_id', 'rating', 'timestamp']
+    
+    # Clean data - remove NaN and infinite values before type conversion
+    initial_count = len(recbole_data)
+    recbole_data = recbole_data.dropna()  # Remove NaN values
+    recbole_data = recbole_data.replace([np.inf, -np.inf], np.nan).dropna()  # Remove infinite values
+    
+    if len(recbole_data) < initial_count:
+        logging.warning(f"⚠️ Removed {initial_count - len(recbole_data)} rows with NaN/infinite values")
     
     # Ensure proper data types
     recbole_data['user_id'] = recbole_data['user_id'].astype(int)
     recbole_data['item_id'] = recbole_data['item_id'].astype(int)
+    recbole_data['rating'] = recbole_data['rating'].astype(float)
     recbole_data['timestamp'] = recbole_data['timestamp'].astype(float)
     
     # Sort by user and timestamp for proper sequential evaluation
@@ -225,9 +242,9 @@ MAX_ITEM_LIST_LENGTH: {min(50, int(stats['avg_seq_length'] * 2))}  # Adaptive ma
 field_separator: "\\t"
 seq_separator: " "
 
-# Load Configuration
+# Load Configuration - NEW SCHEMA: user_id, item_id, rating, timestamp
 load_col:
-  inter: [user_id, item_id, timestamp]
+  inter: [user_id, item_id, rating, timestamp]
   
 # Evaluation
 eval_args:
@@ -257,10 +274,11 @@ def validate_recbole_format(inter_file: str) -> bool:
         # Load and check format
         data = pd.read_csv(inter_file, sep='\t')
         
-        # Check required columns
-        required_cols = ['user_id', 'item_id', 'timestamp']
+        # Check required columns - NEW SCHEMA: user_id, item_id, rating, timestamp
+        required_cols = ['user_id', 'item_id', 'rating', 'timestamp']
         if not all(col in data.columns for col in required_cols):
             logging.error(f"❌ Missing required columns: {required_cols}")
+            logging.error(f"Found columns: {list(data.columns)}")
             return False
         
         # Check data types
@@ -270,6 +288,10 @@ def validate_recbole_format(inter_file: str) -> bool:
             
         if not pd.api.types.is_integer_dtype(data['item_id']):
             logging.error("❌ item_id must be integer type") 
+            return False
+        
+        if not pd.api.types.is_numeric_dtype(data['rating']):
+            logging.error("❌ rating must be numeric type")
             return False
             
         if not pd.api.types.is_numeric_dtype(data['timestamp']):
@@ -308,7 +330,7 @@ def append_future_data_for_etl(new_data: pd.DataFrame,
     - Use older timestamps (existing data) as training/validation
     
     Args:
-        new_data: DataFrame with new interactions [user_id, item_id, timestamp]
+        new_data: DataFrame with new interactions [user_id, item_id, rating, timestamp]
         existing_inter_file: Path to existing .inter file
         output_file: Output file path (optional, defaults to existing_inter_file)
         
@@ -320,7 +342,7 @@ def append_future_data_for_etl(new_data: pd.DataFrame,
         new_batch = pd.read_csv('etl_batch_day_5.csv')
         
         # Convert to RecBole format
-        new_batch_recbole = new_batch[['user_id', 'item_id', 'timestamp']].copy()
+        new_batch_recbole = new_batch[['user_id', 'item_id', 'rating', 'timestamp']].copy()
         
         # Append to existing training data
         updated_file = append_future_data_for_etl(
@@ -338,10 +360,17 @@ def append_future_data_for_etl(new_data: pd.DataFrame,
         existing_data = pd.read_csv(existing_inter_file, sep='\t')
         logging.info(f"📄 Loaded {len(existing_data)} existing interactions")
         
-        # Ensure consistent column names and types
-        new_data_clean = new_data[['user_id', 'item_id', 'timestamp']].copy()
+        # Ensure consistent column names and types - NEW SCHEMA: user_id, item_id, rating, timestamp
+        required_cols = ['user_id', 'item_id', 'rating', 'timestamp']
+        if not all(col in new_data.columns for col in required_cols):
+            logging.error(f"❌ New data missing required columns: {required_cols}")
+            logging.error(f"Found columns: {list(new_data.columns)}")
+            raise ValueError(f"New data must have columns: {required_cols}")
+            
+        new_data_clean = new_data[required_cols].copy()
         new_data_clean['user_id'] = new_data_clean['user_id'].astype(int)
-        new_data_clean['item_id'] = new_data_clean['item_id'].astype(int) 
+        new_data_clean['item_id'] = new_data_clean['item_id'].astype(int)
+        new_data_clean['rating'] = new_data_clean['rating'].astype(float)
         new_data_clean['timestamp'] = new_data_clean['timestamp'].astype(float)
         
         # Combine data (new data will have later timestamps)
