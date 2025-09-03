@@ -36,7 +36,7 @@ topk: [1, 5, 10, 20]                         # Top-K for evaluation
 valid_metric: 'NDCG@10'                      # Primary validation metric
 
 # Data Configuration
-data_path: '/MovieLens-RecSys/data/recbole_format'  # Absolute path to RecBole format data directory
+data_path: 'data/recbole_format'  # Relative path to RecBole format data directory
 MAX_ITEM_LIST_LENGTH: 50    # Maximum sequence length
 load_col:                   # Columns to load - Updated for new schema
   inter: ['user_id', 'item_id', 'rating', 'timestamp']

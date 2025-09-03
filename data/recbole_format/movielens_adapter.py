@@ -185,9 +185,16 @@ def convert_to_recbole_format(data: pd.DataFrame, output_dir: str, dataset_name:
     logging.info(f"After filtering: {len(recbole_data)} interactions")
     logging.info(f"Valid users: {len(valid_users)}")
     
-    # Save as .inter file (RecBole format)
+    # Save as .inter file (RecBole format with proper header)
     inter_file = output_path / f'{dataset_name}.inter'
-    recbole_data.to_csv(inter_file, sep='\t', index=False)
+    
+    # Write RecBole header with feature types
+    with open(inter_file, 'w') as f:
+        # Write proper RecBole header: feature_name:feature_type
+        f.write('user_id:token\titem_id:token\trating:float\ttimestamp:float\n')
+        
+        # Write data rows
+        recbole_data.to_csv(f, sep='\t', index=False, header=False)
     
     logging.info(f"✅ Saved RecBole interaction file: {inter_file}")
     
@@ -274,38 +281,38 @@ def validate_recbole_format(inter_file: str) -> bool:
         # Load and check format
         data = pd.read_csv(inter_file, sep='\t')
         
-        # Check required columns - NEW SCHEMA: user_id, item_id, rating, timestamp
-        required_cols = ['user_id', 'item_id', 'rating', 'timestamp']
+        # Check required columns - RecBole format with feature types
+        required_cols = ['user_id:token', 'item_id:token', 'rating:float', 'timestamp:float']
         if not all(col in data.columns for col in required_cols):
-            logging.error(f"❌ Missing required columns: {required_cols}")
+            logging.error(f"❌ Missing required RecBole columns: {required_cols}")
             logging.error(f"Found columns: {list(data.columns)}")
             return False
         
-        # Check data types
-        if not pd.api.types.is_integer_dtype(data['user_id']):
-            logging.error("❌ user_id must be integer type")
+        # Check data types (using RecBole column names with feature types)
+        if not pd.api.types.is_integer_dtype(data['user_id:token']):
+            logging.error("❌ user_id:token must be integer type")
             return False
             
-        if not pd.api.types.is_integer_dtype(data['item_id']):
-            logging.error("❌ item_id must be integer type") 
+        if not pd.api.types.is_integer_dtype(data['item_id:token']):
+            logging.error("❌ item_id:token must be integer type") 
             return False
         
-        if not pd.api.types.is_numeric_dtype(data['rating']):
-            logging.error("❌ rating must be numeric type")
+        if not pd.api.types.is_numeric_dtype(data['rating:float']):
+            logging.error("❌ rating:float must be numeric type")
             return False
             
-        if not pd.api.types.is_numeric_dtype(data['timestamp']):
+        if not pd.api.types.is_numeric_dtype(data['timestamp:float']):
             logging.error("❌ timestamp must be numeric type")
             return False
         
         # Check temporal ordering
-        user_groups = data.groupby('user_id')
+        user_groups = data.groupby('user_id:token')
         for user_id, group in user_groups:
-            if not group['timestamp'].is_monotonic_increasing:
+            if not group['timestamp:float'].is_monotonic_increasing:
                 logging.warning(f"⚠️ Timestamps not ordered for user {user_id}")
         
         # Check minimum interactions per user
-        user_counts = data['user_id'].value_counts()
+        user_counts = data['user_id:token'].value_counts()
         min_interactions = user_counts.min()
         if min_interactions < 3:
             logging.warning(f"⚠️ Some users have < 3 interactions (min: {min_interactions})")
@@ -383,7 +390,13 @@ def append_future_data_for_etl(new_data: pd.DataFrame,
         if output_file is None:
             output_file = existing_inter_file
         
-        combined_data.to_csv(output_file, sep='\t', index=False)
+        # Write RecBole format with proper header
+        with open(output_file, 'w') as f:
+            # Write proper RecBole header: feature_name:feature_type
+            f.write('user_id:token\titem_id:token\trating:float\ttimestamp:float\n')
+            
+            # Write data rows
+            combined_data.to_csv(f, sep='\t', index=False, header=False)
         
         logging.info(f"✅ Updated .inter file: {output_file}")
         logging.info(f"📊 Total interactions: {len(combined_data)}")
