@@ -72,3 +72,8 @@ data/recbole_format/*.inter
 data/recbole_format/*.json
 # Ensure movielens subdirectory is ignored
 data/recbole_format/movielens/
+
+# Large processed data files (can be regenerated from raw data)
+data/processed/*.inter
+data/processed/movielens_past.inter
+data/processed/movielens_future.inter
