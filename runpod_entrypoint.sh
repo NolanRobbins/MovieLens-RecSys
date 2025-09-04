@@ -146,8 +146,8 @@ fi
 
 # Download RecBole format data (train+val combined, test excluded for future ETL)
 download_recbole_data() {
-    local data_dir="data/recbole_format/movielens"
-    local inter_file="$data_dir/movielens.inter"
+    local data_dir="data/recbole_format/ml-25m"
+    local inter_file="$data_dir/ml-25m.inter"
     local config_file="data/recbole_format/movielens_recbole_config.yaml"
     local stats_file="data/recbole_format/movielens_stats.json"
     
@@ -174,7 +174,7 @@ download_recbole_data() {
     fi
     
     log "📥 Downloading RecBole format data from Google Drive..."
-    log "🎯 Data: movielens_past.inter (80% training data, 25.6M interactions, ~686MB)"
+    log "🎯 Data: ml-25m.inter (training data, 25.6M interactions, ~686MB)"
     log "⚠️  Using training data only - RecBole will handle train/val/test splitting"
     
     # TODO: Replace with your actual Google Drive download links
@@ -184,7 +184,7 @@ download_recbole_data() {
     local GDRIVE_STATS_URL="https://drive.google.com/uc?export=download&id=1dVKkIuDZrMFBahKLLKmhvoG1gs4-ayVG"
     
     # Download interaction file (.inter) using gdown (same method that worked for 1.3GB train_data.csv)
-    log "📥 Downloading movielens_past.inter (~686MB)..."
+    log "📥 Downloading ml-25m.inter (~686MB)..."
     
     # Install gdown if not available (exactly like the working implementation)
     if ! command -v gdown >/dev/null 2>&1; then
@@ -193,12 +193,8 @@ download_recbole_data() {
     fi
     
     # Use gdown with direct Google Drive URL (same as working train_data.csv download)
-    # Download as movielens_past.inter first, then rename to movielens.inter for RecBole
-    local temp_file="$data_dir/movielens_past.inter"
-    gdown "$GDRIVE_INTER_URL" -O "$temp_file" || error_exit "Failed to download .inter file"
-    
-    # Rename to movielens.inter for RecBole compatibility
-    mv "$temp_file" "$inter_file" || error_exit "Failed to rename file for RecBole"
+    # Download directly as ml-25m.inter for RecBole compatibility
+    gdown "$GDRIVE_INTER_URL" -O "$inter_file" || error_exit "Failed to download .inter file"
     
     # Download config file using gdown
     log "📥 Downloading RecBole config..."
@@ -215,7 +211,7 @@ download_recbole_data() {
         local size_mb=$((downloaded_size / 1024 / 1024))
         log "✅ RecBole data downloaded (${downloaded_size} bytes = ${size_mb}MB)"
         
-        # Validate file size is reasonable (should be >500MB for movielens_past.inter)
+        # Validate file size is reasonable (should be >500MB for ml-25m.inter)
         if [ "$downloaded_size" -gt 500000000 ]; then  # > 500MB
             # Check first line for proper format
             local first_line=$(head -1 "$inter_file")

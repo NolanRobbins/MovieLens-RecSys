@@ -193,14 +193,14 @@ def main():
     log_file = output_dir / f"ss4rec_official_training.log"
     setup_logging(args.log_level, str(log_file))
     
-    logging.info("🚀 Official SS4Rec Training Script")
-    logging.info(f"📄 Config: {args.config}")
-    logging.info(f"📂 Output: {args.output_dir}")
-    logging.info(f"📝 Log: {log_file}")
+    logging.info("Official SS4Rec Training Script")
+    logging.info(f"Config: {args.config}")
+    logging.info(f"Output: {args.output_dir}")
+    logging.info(f"Log: {log_file}")
     
     # Check dependencies - try to import RecBole now
     if not check_recbole_imports():
-        logging.error("❌ RecBole not available")
+        logging.error("RecBole not available")
         logging.error("Install with: uv pip install recbole==1.2.0")
         return 1
     

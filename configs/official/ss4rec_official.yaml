@@ -7,7 +7,7 @@
 
 # Model Configuration
 model: SS4RecOfficial
-dataset: movielens
+dataset: ml-25m
 
 # SS4Rec Architecture Parameters (from paper)
 hidden_size: 64             # Model dimension
@@ -38,8 +38,10 @@ valid_metric: 'NDCG@10'                      # Primary validation metric
 # Data Configuration (RecBole Standard)
 USER_ID_FIELD: user_id
 ITEM_ID_FIELD: item_id
+RATING_FIELD: rating
 TIME_FIELD: timestamp
 data_path: 'data/recbole_format'  # Relative path to RecBole format data directory
+download: False  # Disable automatic download for custom dataset
 MAX_ITEM_LIST_LENGTH: 50    # Maximum sequence length
 ITEM_LIST_LENGTH_FIELD: item_length
 LIST_SUFFIX: _list
