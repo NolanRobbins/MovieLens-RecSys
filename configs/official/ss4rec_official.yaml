@@ -35,16 +35,23 @@ metrics: ['Recall', 'MRR', 'NDCG', 'Hit']    # Standard RecSys metrics
 topk: [1, 5, 10, 20]                         # Top-K for evaluation
 valid_metric: 'NDCG@10'                      # Primary validation metric
 
-# Data Configuration
+# Data Configuration (RecBole Standard)
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: item_id
+TIME_FIELD: timestamp
 data_path: 'data/recbole_format'  # Relative path to RecBole format data directory
 MAX_ITEM_LIST_LENGTH: 50    # Maximum sequence length
+ITEM_LIST_LENGTH_FIELD: item_length
+LIST_SUFFIX: _list
 load_col:                   # Columns to load - Updated for new schema
   inter: ['user_id', 'item_id', 'rating', 'timestamp']
   
-# Data splitting
+# Data splitting (RecBole Standard)
 eval_args:
+  group_by: user
   split: {'LS': 'valid_and_test'}   # Leave-one-out splitting
   order: 'TO'                       # Time-ordered splitting
+  mode: full
   
 # Device and Reproducibility  
 device: cuda                # GPU training

@@ -174,17 +174,17 @@ download_recbole_data() {
     fi
     
     log "📥 Downloading RecBole format data from Google Drive..."
-    log "🎯 Data: Train + Val combined (20M+ interactions, ~400MB)"
-    log "⚠️  Test data excluded for future ETL pipeline evaluation"
+    log "🎯 Data: movielens_past.inter (80% training data, 25.6M interactions, ~686MB)"
+    log "⚠️  Using training data only - RecBole will handle train/val/test splitting"
     
     # TODO: Replace with your actual Google Drive download links
     # You'll need to replace these URLs with the actual Google Drive download links
-    local GDRIVE_INTER_URL="https://drive.google.com/uc?export=download&id=1Scz4kDtohppr95vb96lM1XgBm2S1Yyds"
+    local GDRIVE_INTER_URL="https://drive.google.com/uc?export=download&id=1tGY6F_2nEeSWwAXJ_4F832p0BzEbAGfv"
     local GDRIVE_CONFIG_URL="https://drive.google.com/uc?export=download&id=1Uxe42ENupS6cM5GYDxgARdx-ucPJzPof"
     local GDRIVE_STATS_URL="https://drive.google.com/uc?export=download&id=1dVKkIuDZrMFBahKLLKmhvoG1gs4-ayVG"
     
     # Download interaction file (.inter) using gdown (same method that worked for 1.3GB train_data.csv)
-    log "📥 Downloading movielens.inter (~495MB)..."
+    log "📥 Downloading movielens_past.inter (~686MB)..."
     
     # Install gdown if not available (exactly like the working implementation)
     if ! command -v gdown >/dev/null 2>&1; then
@@ -193,7 +193,12 @@ download_recbole_data() {
     fi
     
     # Use gdown with direct Google Drive URL (same as working train_data.csv download)
-    gdown "$GDRIVE_INTER_URL" -O "$inter_file" || error_exit "Failed to download .inter file"
+    # Download as movielens_past.inter first, then rename to movielens.inter for RecBole
+    local temp_file="$data_dir/movielens_past.inter"
+    gdown "$GDRIVE_INTER_URL" -O "$temp_file" || error_exit "Failed to download .inter file"
+    
+    # Rename to movielens.inter for RecBole compatibility
+    mv "$temp_file" "$inter_file" || error_exit "Failed to rename file for RecBole"
     
     # Download config file using gdown
     log "📥 Downloading RecBole config..."
@@ -210,8 +215,8 @@ download_recbole_data() {
         local size_mb=$((downloaded_size / 1024 / 1024))
         log "✅ RecBole data downloaded (${downloaded_size} bytes = ${size_mb}MB)"
         
-        # Validate file size is reasonable (should be >100MB for our dataset)
-        if [ "$downloaded_size" -gt 100000000 ]; then  # > 100MB
+        # Validate file size is reasonable (should be >500MB for movielens_past.inter)
+        if [ "$downloaded_size" -gt 500000000 ]; then  # > 500MB
             # Check first line for proper format
             local first_line=$(head -1 "$inter_file")
             if echo "$first_line" | grep -q "user_id.*item_id.*timestamp"; then
