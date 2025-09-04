@@ -27,6 +27,12 @@ python test_ss4rec_ml1m.py --config configs/official/ss4rec_ml1m_test.yaml --deb
 ./runpod_entrypoint.sh --test-ml1m --debug
 ```
 
+### **Dependency Fix Applied**
+- ✅ Added `kmeans-pytorch>=0.3.0` to requirements_ss4rec.txt
+- ✅ Updated runpod_entrypoint.sh to install kmeans-pytorch before RecBole
+- ✅ Updated test script to check for kmeans_pytorch dependency
+- **Issue**: RecBole's LDiffRec model requires kmeans-pytorch but it's not included in RecBole's dependencies
+
 ## 🎉 PREVIOUS ISSUES RESOLVED
 
 ### **0. Dataset Recognition Issue (FIXED)** ✅

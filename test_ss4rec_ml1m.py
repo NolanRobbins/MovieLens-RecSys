@@ -63,7 +63,8 @@ def check_dependencies():
         'recbole',
         'numpy',
         'pandas',
-        'yaml'
+        'yaml',
+        'kmeans_pytorch'
     ]
     
     missing_packages = []

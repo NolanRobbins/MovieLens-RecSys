@@ -281,6 +281,7 @@ if [[ "$MODEL_TYPE" == "ss4rec"* ]] && [ -f "requirements_ss4rec.txt" ]; then
     
     log "📦 Installing RecBole and its dependencies..."
     uv pip install "ray>=2.0.0" "hyperopt>=0.2.7" || error_exit "Failed to install RecBole dependencies"
+    uv pip install "kmeans-pytorch>=0.3.0" || error_exit "Failed to install kmeans-pytorch"
     uv pip install recbole==1.2.0 || error_exit "Failed to install recbole"
     
     # Install monitoring and dev tools
