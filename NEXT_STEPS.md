@@ -33,6 +33,12 @@ python test_ss4rec_ml1m.py --config configs/official/ss4rec_ml1m_test.yaml --deb
 - ✅ Updated test script to check for kmeans_pytorch dependency
 - **Issue**: RecBole's LDiffRec model requires kmeans-pytorch but it's not included in RecBole's dependencies
 
+### **Distributed Training Fix Applied**
+- ✅ Added proper single-GPU distributed environment initialization
+- ✅ Updated test script to handle `torch.distributed.barrier()` calls
+- ✅ Added cleanup for distributed process groups
+- **Issue**: RecBole tries to use distributed training features even in single-GPU mode
+
 ## 🎉 PREVIOUS ISSUES RESOLVED
 
 ### **0. Dataset Recognition Issue (FIXED)** ✅

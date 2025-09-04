@@ -105,6 +105,17 @@ def test_recbole_ml1m_download():
         from recbole.config import Config
         from recbole.data import create_dataset, data_preparation
         from recbole.utils import init_seed
+        import torch.distributed as dist
+        import os
+        
+        # Initialize single-GPU distributed environment
+        if not dist.is_initialized():
+            os.environ['MASTER_ADDR'] = 'localhost'
+            os.environ['MASTER_PORT'] = '29500'
+            os.environ['RANK'] = '0'
+            os.environ['WORLD_SIZE'] = '1'
+            dist.init_process_group(backend='gloo', rank=0, world_size=1)
+            logger.info("✅ Initialized single-GPU distributed environment")
         
         logger.info("🧪 Testing RecBole ml-1m dataset download...")
         
@@ -135,7 +146,14 @@ def test_recbole_ml1m_download():
             'epochs': 1,  # Just test loading
             'device': 'cpu',  # Use CPU for testing
             'reproducibility': True,
-            'seed': 2023
+            'seed': 2023,
+            # Single-GPU distributed training parameters (required by RecBole)
+            'nproc': 1,
+            'world_size': 1,
+            'offset': 0,
+            'ip': 'localhost',
+            'port': 29500,
+            'backend': 'gloo'
         }
         
         config = Config(model='BPR', dataset='ml-1m', config_dict=config_dict)
@@ -157,11 +175,25 @@ def test_recbole_ml1m_download():
         logger.info(f"   Valid batches: {len(valid_data)}")
         logger.info(f"   Test batches: {len(test_data)}")
         
+        # Cleanup distributed environment
+        if dist.is_initialized():
+            dist.destroy_process_group()
+            logger.info("✅ Cleaned up distributed environment")
+        
         return True
         
     except Exception as e:
         logger.error(f"❌ RecBole ml-1m test failed: {e}")
         logger.error(traceback.format_exc())
+        
+        # Cleanup distributed environment on error
+        try:
+            if dist.is_initialized():
+                dist.destroy_process_group()
+                logger.info("✅ Cleaned up distributed environment after error")
+        except:
+            pass  # Ignore cleanup errors
+        
         return False
 
 def test_ss4rec_model_loading():
@@ -202,6 +234,17 @@ def run_ss4rec_ml1m_test(config_file, debug=False):
         from recbole.data import create_dataset, data_preparation
         from recbole.utils import init_seed, get_model, get_trainer
         from recbole.utils.logger import init_logger
+        import torch.distributed as dist
+        import os
+        
+        # Initialize single-GPU distributed environment
+        if not dist.is_initialized():
+            os.environ['MASTER_ADDR'] = 'localhost'
+            os.environ['MASTER_PORT'] = '29500'
+            os.environ['RANK'] = '0'
+            os.environ['WORLD_SIZE'] = '1'
+            dist.init_process_group(backend='gloo', rank=0, world_size=1)
+            logger.info("✅ Initialized single-GPU distributed environment for SS4Rec test")
         
         # Load configuration
         config = Config(model='SS4RecOfficial', dataset='ml-1m', config_file_list=[config_file])
@@ -241,11 +284,25 @@ def run_ss4rec_ml1m_test(config_file, debug=False):
         test_result = trainer.evaluate(test_data, load_best_model=True, show_progress=True)
         logger.info(f"📊 Test results: {test_result}")
         
+        # Cleanup distributed environment
+        if dist.is_initialized():
+            dist.destroy_process_group()
+            logger.info("✅ Cleaned up distributed environment")
+        
         return True
         
     except Exception as e:
         logger.error(f"❌ SS4Rec ML-1M test failed: {e}")
         logger.error(traceback.format_exc())
+        
+        # Cleanup distributed environment on error
+        try:
+            if dist.is_initialized():
+                dist.destroy_process_group()
+                logger.info("✅ Cleaned up distributed environment after error")
+        except:
+            pass  # Ignore cleanup errors
+        
         return False
 
 def main():
