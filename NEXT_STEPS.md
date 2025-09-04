@@ -1,10 +1,43 @@
 
 # SS4Rec Training - Critical Action Plan
 
-**Status**: ✅ **COMPLETE** - Ready for RunPod deployment  
+**Status**: 🧪 **TESTING PHASE** - ML-1M Validation Before ML-25M  
 **Updated**: 2025-01-27
 
-## 🎉 ALL CRITICAL ISSUES RESOLVED
+## 🧪 NEW TESTING APPROACH - ML-1M VALIDATION
+
+### **Strategy Change**: Test on Standard Dataset First
+**Problem**: Need to validate SS4Rec model works correctly before using custom ml-25m dataset  
+**Solution**: Test on RecBole's standard ml-1m dataset first, then debug ml-25m integration  
+**Status**: 🚀 **READY FOR ML-1M TESTING**
+
+### **ML-1M Test Configuration**
+- **Dataset**: Standard RecBole ml-1m (automatically downloaded)
+- **Config**: `configs/official/ss4rec_ml1m_test.yaml`
+- **Script**: `test_ss4rec_ml1m.py`
+- **Expected Results**: HR@10 > 0.25, NDCG@10 > 0.20
+- **Training Time**: 1-2 hours (much faster than ml-25m)
+
+### **Testing Commands**
+```bash
+# Local testing
+python test_ss4rec_ml1m.py --config configs/official/ss4rec_ml1m_test.yaml --debug
+
+# RunPod testing
+./runpod_entrypoint.sh --test-ml1m --debug
+```
+
+## 🎉 PREVIOUS ISSUES RESOLVED
+
+### **0. Dataset Recognition Issue (FIXED)** ✅
+**Problem**: RecBole couldn't find dataset - "Neither [data/recbole_format/movielens/movielens] exists in the device nor [movielens] a known dataset name"
+**Solution**: 
+- Changed dataset name from `movielens` to `ml-25m` (standard RecBole name)
+- Renamed `movielens_past.inter` to `ml-25m.inter` and uploaded to Google Drive
+- Updated runpod script to download directly as `ml-25m.inter` to `data/recbole_format/ml-25m/`
+- Updated configuration in `configs/official/ss4rec_official.yaml`
+- Added `download: False` to prevent RecBole from auto-downloading standard ml-25m dataset
+**Status**: ✅ **RESOLVED** - Dataset now recognized by RecBole
 
 ### **1. Missing Data Files (COMPLETE)** ✅
 **Solution**: Generated all required `.inter` files from fresh ML-32M data
@@ -26,14 +59,29 @@ data/recbole_format/movielens/movielens_past.inter  # 686.5 MB, training data
 **Files**: `sequential_dataset_official.py`, `SS4Rec.py`, `ss4rec_official.py`, `README.md`
 **Location**: `models/official_ss4rec/` directory ready for integration
 
-## 🚀 READY FOR DEPLOYMENT
+## 🧪 TESTING WORKFLOW
 
-### **Deploy to RunPod**
+### **Phase 1: ML-1M Validation (CURRENT)**
 ```bash
-# Recommended first run with debug
+# Test SS4Rec on standard ml-1m dataset
+./runpod_entrypoint.sh --test-ml1m --debug
+
+# Expected: Model trains successfully, no gradient explosion
+# Success Criteria: HR@10 > 0.25, NDCG@10 > 0.20
+```
+
+### **Phase 2: ML-25M Integration (NEXT)**
+```bash
+# After ml-1m test passes, try ml-25m
 ./runpod_entrypoint.sh --model ss4rec-official --debug
 
-# Production run
+# Debug any dataset-specific issues
+# Expected: Same model architecture works with larger dataset
+```
+
+### **Phase 3: Production Training (FINAL)**
+```bash
+# Full training on ml-25m
 ./runpod_entrypoint.sh --model ss4rec-official --production
 ```
 
@@ -55,7 +103,7 @@ data/recbole_format/movielens/movielens_past.inter  # 686.5 MB, training data
 **Data Files**:
 - ✅ `data/processed/movielens_past.inter` - Training data (686.5 MB)
 - ✅ `data/processed/movielens_future.inter` - ETL pipeline data (176.6 MB)
-- ✅ `data/recbole_format/movielens/movielens.inter` - Complete dataset (863.0 MB)
+- ✅ `data/recbole_format/ml-25m/ml-25m.inter` - Training data (686.5 MB) **[FIXED]**
 - ✅ `data/recbole_format/movielens/movielens_past.inter` - Training data (686.5 MB)
 - ✅ `data/processed/data_mappings.pkl` - User/movie mappings (200,948 users, 84,432 movies)
 
@@ -65,6 +113,8 @@ data/recbole_format/movielens/movielens_past.inter  # 686.5 MB, training data
 - ✅ `models/official_ss4rec/ss4rec_official.py` - Enhanced SS4Rec with custom TimeAwareSSM
 - ✅ `models/official_ss4rec/README.md` - Official documentation
 - ✅ `configs/official/ss4rec_official.yaml` - Training configuration
+- 🆕 `configs/official/ss4rec_ml1m_test.yaml` - ML-1M test configuration
+- 🆕 `test_ss4rec_ml1m.py` - ML-1M testing script
 
 **Scripts**:
 - ✅ `create_recbole_data.py` - Data generation script
@@ -79,8 +129,8 @@ data/recbole_format/movielens/movielens_past.inter  # 686.5 MB, training data
 - ✅ **BPR Loss**: Bayesian Personalized Ranking for ranking task
 - ✅ **Paper Architecture**: Hybrid SSM combining S5 + Mamba as specified
 
-**Status**: 🎉 **READY FOR RUNPOD DEPLOYMENT**  
-**Validation**: ✅ **COMPREHENSIVE PRE-FLIGHT TESTING COMPLETE**
+**Status**: 🧪 **READY FOR ML-1M TESTING**  
+**Validation**: ✅ **ML-1M TEST SETUP COMPLETE**
 
 ## 🛡️ **PRE-FLIGHT VALIDATION RESULTS**
 
@@ -126,4 +176,22 @@ Based on comprehensive validation, the risk of wasting GPU credits is **minimal*
 
 **If these happen, training will complete successfully!**
 
-**Status**: 🎉 **READY FOR RUNPOD DEPLOYMENT**
+**Status**: 🧪 **READY FOR ML-1M TESTING**
+
+## 🎯 **NEXT IMMEDIATE ACTIONS**
+
+### **1. Test SS4Rec on ML-1M Dataset**
+```bash
+# Run the ML-1M test
+./runpod_entrypoint.sh --test-ml1m --debug
+```
+
+### **2. Validate Model Architecture**
+- ✅ Verify no gradient explosion on standard dataset
+- ✅ Confirm training progresses through multiple epochs
+- ✅ Check that metrics improve over time
+
+### **3. Debug ML-25M Integration (if needed)**
+- If ml-1m test passes, proceed to ml-25m
+- If ml-1m test fails, debug model architecture first
+- Focus on dataset-specific issues vs model issues

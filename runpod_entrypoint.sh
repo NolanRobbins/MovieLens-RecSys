@@ -63,15 +63,20 @@ while [[ $# -gt 0 ]]; do
             DEBUG_LOGGING=false
             shift
             ;;
+        --test-ml1m)
+            MODEL_TYPE="ss4rec-ml1m-test"
+            shift
+            ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
-            echo "  --model MODEL     Model type (ncf, ss4rec, ss4rec-official) [default: ncf]"
+            echo "  --model MODEL     Model type (ncf, ss4rec, ss4rec-official, ss4rec-ml1m-test) [default: ncf]"
             echo "  --config FILE     Custom config file"
             echo "  --no-wandb        Disable W&B logging"
             echo "  --no-setup        Skip automatic setup"
             echo "  --debug           Enable comprehensive debug logging for NaN detection"
             echo "  --production      Disable debug logging for optimal performance"
+            echo "  --test-ml1m       Test SS4Rec on ml-1m dataset before using ml-25m"
             echo "  --help            Show this help"
             exit 0
             ;;
@@ -232,9 +237,11 @@ download_recbole_data() {
     fi
 }
 
-# Download data for SS4Rec models
-if [[ "$MODEL_TYPE" == "ss4rec"* ]]; then
+# Download data for SS4Rec models (skip for ml-1m test as RecBole handles it)
+if [[ "$MODEL_TYPE" == "ss4rec"* ]] && [ "$MODEL_TYPE" != "ss4rec-ml1m-test" ]; then
     download_recbole_data
+elif [ "$MODEL_TYPE" = "ss4rec-ml1m-test" ]; then
+    log "🧪 ML-1M test mode: RecBole will automatically download ml-1m dataset"
 fi
 
 # Install requirements using uv pip
@@ -356,6 +363,8 @@ if [ -z "$CONFIG_FILE" ]; then
         CONFIG_FILE="configs/ss4rec_a6000_optimized.yaml"
     elif [ "$MODEL_TYPE" = "ss4rec-official" ]; then
         CONFIG_FILE="configs/official/ss4rec_official.yaml"
+    elif [ "$MODEL_TYPE" = "ss4rec-ml1m-test" ]; then
+        CONFIG_FILE="configs/official/ss4rec_ml1m_test.yaml"
     else
         CONFIG_FILE="configs/${MODEL_TYPE}.yaml"
     fi
@@ -511,6 +520,14 @@ log "================================"
 if [ "$MODEL_TYPE" = "ss4rec-official" ]; then
     # Official SS4Rec using RecBole framework
     TRAIN_CMD="python training/official/runpod_train_ss4rec_official.py --config $CONFIG_FILE --install-deps --prepare-data"
+elif [ "$MODEL_TYPE" = "ss4rec-ml1m-test" ]; then
+    # SS4Rec ML-1M test
+    log "🧪 Running SS4Rec ML-1M test before using ml-25m dataset"
+    if [ "$DEBUG_LOGGING" = true ]; then
+        TRAIN_CMD="python test_ss4rec_ml1m.py --config $CONFIG_FILE --debug"
+    else
+        TRAIN_CMD="python test_ss4rec_ml1m.py --config $CONFIG_FILE"
+    fi
 elif [ "$MODEL_TYPE" = "ss4rec" ]; then
     # Custom SS4Rec (deprecated - has gradient explosion issues)
     log "⚠️ WARNING: Using deprecated custom SS4Rec implementation"
