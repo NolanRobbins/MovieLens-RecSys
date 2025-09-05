@@ -304,7 +304,11 @@ class SS4RecOfficial(SequentialRecommender):
         """
         item_seq = interaction[self.ITEM_SEQ]
         item_seq_len = interaction[self.ITEM_SEQ_LEN]
-        timestamps = interaction.get('timestamp_list', None)  # Available in test interactions
+        # RecBole Interaction does not support dict.get; guard access explicitly
+        try:
+            timestamps = interaction['timestamp_list']
+        except Exception:
+            timestamps = None
         
         seq_output = self.forward(item_seq, item_seq_len, timestamps)
         seq_repr = self.gather_indexes(seq_output, item_seq_len - 1)
