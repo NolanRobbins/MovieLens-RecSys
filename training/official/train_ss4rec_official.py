@@ -23,6 +23,25 @@ from typing import Dict, Any
 project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
+# Inject our SequentialDataset override before any RecBole import
+def inject_sequential_dataset_override() -> None:
+    try:
+        import importlib.util
+        override_path = project_root / 'models' / 'official_ss4rec' / 'sequential_dataset_official.py'
+        if override_path.exists():
+            spec = importlib.util.spec_from_file_location(
+                'recbole.data.sequential_dataset', str(override_path)
+            )
+            module = importlib.util.module_from_spec(spec)
+            assert spec.loader is not None
+            spec.loader.exec_module(module)
+            sys.modules['recbole.data.sequential_dataset'] = module
+            logging.info('✅ Injected SequentialDataset override for RecBole')
+        else:
+            logging.warning(f'SequentialDataset override not found: {override_path}')
+    except Exception as e:
+        logging.warning(f'Failed to inject SequentialDataset override: {e}')
+
 # Defer RecBole imports until after dependency installation
 RECBOLE_AVAILABLE = False
 SS4RecOfficial = None
@@ -32,6 +51,8 @@ def check_recbole_imports():
     """Check if RecBole imports are available"""
     global RECBOLE_AVAILABLE, SS4RecOfficial, create_ss4rec_config
     try:
+        # Ensure dataset override is active before importing RecBole
+        inject_sequential_dataset_override()
         from recbole.quick_start import run_recbole
         from recbole.config import Config
         from recbole.data import create_dataset, data_preparation
@@ -79,6 +100,7 @@ def train_ss4rec_official(config_file: str, dataset_path: str = None, output_dir
         raise ImportError("RecBole is required. Install with: uv pip install recbole==1.2.0")
     
     # Import RecBole modules now that we know they're available
+    inject_sequential_dataset_override()
     from recbole.quick_start import run_recbole
     from recbole.config import Config
     from recbole.utils import init_seed, init_logger

@@ -51,7 +51,7 @@ def setup_logging(debug=False):
         console_handler.setLevel(logging.WARNING)
     
     logger = logging.getLogger(__name__)
-    logger.info("🔧 Logging configured for SS4Rec ML-1M test")
+    logger.info("Logging configured for SS4Rec ML-1M test")
     return logger
 
 def check_dependencies():
@@ -72,10 +72,10 @@ def check_dependencies():
     for package in required_packages:
         try:
             __import__(package)
-            logger.info(f"✅ {package} available")
+            logger.info(f"[OK] {package} available")
         except ImportError:
             missing_packages.append(package)
-            logger.error(f"❌ {package} not available")
+            logger.error(f"[ERROR] {package} not available")
     
     if missing_packages:
         logger.error(f"Missing packages: {missing_packages}")
@@ -220,10 +220,7 @@ def test_ss4rec_model_loading():
             logger.info("✅ Initialized single-GPU distributed environment for model test")
         
         # Create a minimal config for model testing
-        from recbole.config import Config
-        
         config_dict = {
-            'model': 'SS4RecOfficial',
             'dataset': 'ml-1m',
             'data_path': 'data/recbole_format',
             'USER_ID_FIELD': 'user_id',
@@ -257,11 +254,20 @@ def test_ss4rec_model_loading():
             'backend': 'gloo'
         }
         
-        config = Config(model='SS4RecOfficial', dataset='ml-1m', config_dict=config_dict)
-        logger.info("✅ Config created for SS4Rec model testing")
+        # Test model initialization by creating a minimal dataset first
+        from recbole.data import create_dataset
+        from recbole.config import Config
         
-        # Test model initialization with proper config
-        model = SS4RecOfficial(config=config, dataset=None)
+        # Create a minimal config for dataset creation
+        dataset_config = Config(model='BPR', dataset='ml-1m', config_dict=config_dict)
+        logger.info("✅ Dataset config created")
+        
+        # Create dataset
+        dataset = create_dataset(dataset_config)
+        logger.info(f"✅ Dataset created: {dataset.user_num} users, {dataset.item_num} items")
+        
+        # Now test model initialization with the dataset
+        model = SS4RecOfficial(config=dataset_config, dataset=dataset)
         logger.info("✅ SS4RecOfficial model initialized successfully")
         
         # Cleanup distributed environment
@@ -310,26 +316,34 @@ def run_ss4rec_ml1m_test(config_file, debug=False):
             dist.init_process_group(backend='gloo', rank=0, world_size=1)
             logger.info("✅ Initialized single-GPU distributed environment for SS4Rec test")
         
-        # Load configuration
-        config = Config(model='SS4RecOfficial', dataset='ml-1m', config_file_list=[config_file])
-        init_seed(config['seed'], config['reproducibility'])
+        # Import the custom model
+        from models.official_ss4rec.ss4rec_official import SS4RecOfficial
+        
+        # Load configuration - use a standard model for config, then override
+        base_config = Config(model='BPR', dataset='ml-1m', config_file_list=[config_file])
+        
+        # Override with SS4Rec specific parameters
+        base_config['model'] = SS4RecOfficial
+        base_config['MODEL_TYPE'] = 'Sequential'
+        
+        init_seed(base_config['seed'], base_config['reproducibility'])
         
         # Initialize logger
-        init_logger(config)
+        init_logger(base_config)
         
         logger.info("📊 Creating dataset...")
-        dataset = create_dataset(config)
+        dataset = create_dataset(base_config)
         logger.info(f"✅ Dataset: {dataset.user_num} users, {dataset.item_num} items, {dataset.inter_num} interactions")
         
         logger.info("🔄 Preparing data...")
-        train_data, valid_data, test_data = data_preparation(config, dataset)
+        train_data, valid_data, test_data = data_preparation(base_config, dataset)
         
         logger.info("🧠 Initializing SS4Rec model...")
-        model = get_model(config['model'])(config, train_data.dataset).to(config['device'])
-        logger.info(f"✅ Model initialized on {config['device']}")
+        model = SS4RecOfficial(config=base_config, dataset=train_data.dataset).to(base_config['device'])
+        logger.info(f"✅ Model initialized on {base_config['device']}")
         
         logger.info("🏃 Initializing trainer...")
-        trainer = get_trainer(config['MODEL_TYPE'], config['model'])(config, model)
+        trainer = get_trainer(base_config['MODEL_TYPE'], base_config['model'])(base_config, model)
         
         logger.info("🎯 Starting training (limited epochs for testing)...")
         start_time = time.time()

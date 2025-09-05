@@ -23,6 +23,8 @@ recbole==1.2.0
 ray>=2.0.0  # Required by RecBole for distributed computing
 hyperopt>=0.2.7  # Required by RecBole for hyperparameter optimization
 kmeans-pytorch>=0.3.0  # Required by RecBole for LDiffRec model
+lightgbm>=3.3.0  # Required by RecBole for external recommender models
+xgboost>=1.7.0  # Required by RecBole for external recommender models
 
 # Experiment tracking and monitoring
 wandb>=0.15.0

@@ -25,10 +25,31 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
 import shutil  # Added for file moving
+import yaml
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
+
+
+# Inject our SequentialDataset override before any RecBole import
+def inject_sequential_dataset_override() -> None:
+    try:
+        import importlib.util
+        override_path = project_root / 'models' / 'official_ss4rec' / 'sequential_dataset_official.py'
+        if override_path.exists():
+            spec = importlib.util.spec_from_file_location(
+                'recbole.data.sequential_dataset', str(override_path)
+            )
+            module = importlib.util.module_from_spec(spec)
+            assert spec.loader is not None
+            spec.loader.exec_module(module)
+            sys.modules['recbole.data.sequential_dataset'] = module
+            logging.info('✅ Injected SequentialDataset override for RecBole')
+        else:
+            logging.warning(f'SequentialDataset override not found: {override_path}')
+    except Exception as e:
+        logging.warning(f'Failed to inject SequentialDataset override: {e}')
 
 
 def setup_logging(log_file: Optional[str] = None):
@@ -65,6 +86,8 @@ def send_discord_notification(message: str, webhook_url: str, color: int = 57637
 
 def check_dependencies() -> bool:
     """Check if all required dependencies are installed"""
+    # Ensure dataset override is active before importing RecBole
+    inject_sequential_dataset_override()
     required_packages = [
         ('torch', 'PyTorch'),
         ('mamba_ssm', 'Mamba SSM'),
@@ -183,6 +206,20 @@ def prepare_data():
         return False
 
 
+def parse_dataset_from_config(config_path: str) -> Dict[str, Any]:
+    """Parse dataset name and download flag from YAML config."""
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
+        dataset = str(cfg.get('dataset', '')).strip()
+        download = bool(cfg.get('download', False))
+        data_path = str(cfg.get('data_path', '')).strip()
+        return {'dataset': dataset, 'download': download, 'data_path': data_path}
+    except Exception as e:
+        logging.warning(f"Failed to parse config {config_path}: {e}")
+        return {'dataset': '', 'download': False, 'data_path': ''}
+
+
 def run_official_ss4rec_training(config_file: str, output_dir: str) -> Dict[str, Any]:
     """
     Run official SS4Rec training using RecBole
@@ -197,6 +234,8 @@ def run_official_ss4rec_training(config_file: str, output_dir: str) -> Dict[str,
     logging.info("🚀 Starting official SS4Rec training...")
     
     try:
+        # Ensure dataset override is active during training
+        inject_sequential_dataset_override()
         # Import training function
         from training.official.train_ss4rec_official import train_ss4rec_official
         
@@ -262,6 +301,8 @@ def main():
     start_time = time.time()
     
     try:
+        # Ensure dataset override is injected at startup
+        inject_sequential_dataset_override()
         # Send start notification
         if discord_webhook:
             start_message = f"""
