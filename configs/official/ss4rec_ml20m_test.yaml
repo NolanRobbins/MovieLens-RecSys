@@ -1,0 +1,96 @@
+# SS4Rec ML-20M Test Configuration
+# Testing SS4Rec model on RecBole ml-20m dataset for scale validation
+# Based on: "SS4Rec: Continuous-Time Sequential Recommendation with State Space Models"
+# arXiv: https://arxiv.org/abs/2502.08132
+
+# Model Configuration
+model: SS4RecOfficial
+dataset: ml-20m
+
+# SS4Rec Architecture Parameters (from paper)
+hidden_size: 128            # Larger model dimension for ml-20m
+n_layers: 3                 # More layers for larger dataset
+dropout_prob: 0.3           # Reduced dropout for larger dataset
+loss_type: 'BPR'           # Bayesian Personalized Ranking for sequential recommendation
+
+# State Space Model Parameters
+d_state: 32                 # Larger state dimension for ml-20m
+d_conv: 4                   # Convolution dimension
+expand: 2                   # Expansion factor
+dt_min: 0.001              # Minimum discretization step
+dt_max: 0.1                # Maximum discretization step
+
+# Training Parameters (optimized for ml-20m - larger dataset)
+learning_rate: 0.0005       # Lower learning rate for stability
+train_batch_size: 4096      # Larger batch size for ml-20m
+eval_batch_size: 4096       # Evaluation batch size
+epochs: 200                 # More epochs for larger dataset
+stopping_step: 10           # Early stopping patience
+weight_decay: 0.0001        # L2 regularization
+
+# Evaluation Configuration
+metrics: ['Recall', 'MRR', 'NDCG', 'Hit']    # Standard RecSys metrics
+topk: [1, 5, 10, 20]                         # Top-K for evaluation
+valid_metric: 'NDCG@10'                      # Primary validation metric
+
+# Data Configuration (RecBole Standard for ml-20m)
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: item_id
+RATING_FIELD: rating
+TIME_FIELD: timestamp
+data_path: 'data/recbole_format'  # Relative path to RecBole format data directory
+download: True  # Enable automatic download of ml-20m dataset
+MAX_ITEM_LIST_LENGTH: 100   # Longer sequences for ml-20m
+ITEM_LIST_LENGTH_FIELD: item_length
+LIST_SUFFIX: _list
+load_col:                   # Columns to load for ml-20m
+  inter: ['user_id', 'item_id', 'rating', 'timestamp']
+  
+# Data filtering for ml-20m (standard RecBole settings)
+user_inter_num_interval: "[20,inf)"      # More interactions required
+item_inter_num_interval: "[20,inf)"      # More interactions required
+val_interval:
+  rating: "[3,inf)"
+  timestamp: "[97830000, inf)"
+
+# Data splitting (RecBole Standard)
+eval_args:
+  group_by: user
+  split: {'RS': [0.8, 0.1, 0.1]}   # Random split for testing
+  order: 'RO'                       # Random order for testing
+  mode: full
+  
+# Device and Reproducibility  
+device: cuda                # GPU training
+gpu_id: 0                   # Use GPU 0
+reproducibility: true       # Ensure reproducible results
+seed: 2023                 # Random seed
+
+# Single-GPU distributed training parameters (required by RecBole)
+nproc: 1                    # Number of processes (single GPU)
+world_size: 1               # Total number of processes
+offset: 0                   # Group offset (starting rank)
+ip: localhost               # Master node IP
+port: 29500                 # Master node port
+backend: gloo               # Use gloo backend for single-GPU
+
+# Optimization
+scheduler: 'StepLR'         # Learning rate scheduler
+step_size: 100              # LR scheduler step size
+gamma: 0.5                  # LR decay factor
+
+# Logging and Checkpointing
+log_wandb: true            # Enable W&B for ml-20m training
+save_dataset: false        # Don't save processed dataset
+save_dataloaders: false    # Don't save data loaders
+checkpoint_dir: 'results/official_ss4rec/ml20m_test/checkpoints'
+
+# Performance Optimization
+num_workers: 8              # More data loading workers for larger dataset
+pin_memory: true            # Pin memory for faster GPU transfer
+
+# Expected Performance Targets for ml-20m:
+# - HR@10: > 0.30 (higher than ml-1m due to larger dataset)
+# - NDCG@10: > 0.25  
+# - MRR@10: Competitive with baselines
+# - Training Time: 4-6 hours on A6000 GPU

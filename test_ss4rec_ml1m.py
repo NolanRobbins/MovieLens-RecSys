@@ -207,18 +207,82 @@ def test_ss4rec_model_loading():
         from models.official_ss4rec.ss4rec_official import SS4RecOfficial
         logger.info("✅ SS4RecOfficial model imported successfully")
         
-        # Test model initialization with dummy parameters
-        model = SS4RecOfficial(
-            config=None,  # Will be set properly in actual training
-            dataset=None  # Will be set properly in actual training
-        )
+        # Initialize single-GPU distributed environment
+        import torch.distributed as dist
+        import os
+        
+        if not dist.is_initialized():
+            os.environ['MASTER_ADDR'] = 'localhost'
+            os.environ['MASTER_PORT'] = '29500'
+            os.environ['RANK'] = '0'
+            os.environ['WORLD_SIZE'] = '1'
+            dist.init_process_group(backend='gloo', rank=0, world_size=1)
+            logger.info("✅ Initialized single-GPU distributed environment for model test")
+        
+        # Create a minimal config for model testing
+        from recbole.config import Config
+        
+        config_dict = {
+            'model': 'SS4RecOfficial',
+            'dataset': 'ml-1m',
+            'data_path': 'data/recbole_format',
+            'USER_ID_FIELD': 'user_id',
+            'ITEM_ID_FIELD': 'item_id',
+            'RATING_FIELD': 'rating',
+            'TIME_FIELD': 'timestamp',
+            'load_col': {
+                'inter': ['user_id', 'item_id', 'rating', 'timestamp']
+            },
+            'hidden_size': 64,
+            'n_layers': 2,
+            'dropout_prob': 0.5,
+            'loss_type': 'BPR',
+            'd_state': 16,
+            'd_conv': 4,
+            'expand': 2,
+            'dt_min': 0.001,
+            'dt_max': 0.1,
+            'learning_rate': 0.001,
+            'train_batch_size': 1024,
+            'eval_batch_size': 1024,
+            'epochs': 1,
+            'device': 'cpu',
+            'reproducibility': True,
+            'seed': 2023,
+            'nproc': 1,
+            'world_size': 1,
+            'offset': 0,
+            'ip': 'localhost',
+            'port': 29500,
+            'backend': 'gloo'
+        }
+        
+        config = Config(model='SS4RecOfficial', dataset='ml-1m', config_dict=config_dict)
+        logger.info("✅ Config created for SS4Rec model testing")
+        
+        # Test model initialization with proper config
+        model = SS4RecOfficial(config=config, dataset=None)
         logger.info("✅ SS4RecOfficial model initialized successfully")
+        
+        # Cleanup distributed environment
+        if dist.is_initialized():
+            dist.destroy_process_group()
+            logger.info("✅ Cleaned up distributed environment")
         
         return True
         
     except Exception as e:
         logger.error(f"❌ SS4Rec model loading failed: {e}")
         logger.error(traceback.format_exc())
+        
+        # Cleanup distributed environment on error
+        try:
+            if dist.is_initialized():
+                dist.destroy_process_group()
+                logger.info("✅ Cleaned up distributed environment after error")
+        except:
+            pass  # Ignore cleanup errors
+        
         return False
 
 def run_ss4rec_ml1m_test(config_file, debug=False):

@@ -4,12 +4,39 @@
 **Status**: 🧪 **TESTING PHASE** - ML-1M Validation Before ML-25M  
 **Updated**: 2025-01-27
 
-## 🧪 NEW TESTING APPROACH - ML-1M VALIDATION
+## 🧪 NEW TESTING APPROACH - MULTI-DATASET STRATEGY
 
-### **Strategy Change**: Test on Standard Dataset First
-**Problem**: Need to validate SS4Rec model works correctly before using custom ml-25m dataset  
-**Solution**: Test on RecBole's standard ml-1m dataset first, then debug ml-25m integration  
+### **Strategy Change**: Progressive Dataset Validation + Temporal Analysis
+**Problem**: Need to validate SS4Rec model works correctly before using custom datasets  
+**Solution**: Multi-stage approach with ML-1M → ML-20M → ML-32M temporal analysis  
 **Status**: 🚀 **READY FOR ML-1M TESTING**
+
+### **🎯 COMPREHENSIVE MULTI-DATASET STRATEGY**
+
+#### **Phase 1: ML-1M Validation (CURRENT)**
+- **Purpose**: Quick model validation on standard RecBole dataset
+- **Timeline**: 1-2 hours on A6000 GPU
+- **Success Criteria**: HR@10 > 0.25, NDCG@10 > 0.20
+- **Command**: `./runpod_entrypoint.sh --test-ml1m --debug`
+
+#### **Phase 2: ML-20M Integration (NEXT)**
+- **Purpose**: Scale up to larger dataset, validate performance
+- **Timeline**: 4-6 hours on A6000 GPU
+- **Success Criteria**: HR@10 > 0.30, NDCG@10 > 0.25
+- **Command**: `./runpod_entrypoint.sh --model ss4rec-official --dataset ml-20m`
+
+#### **Phase 3: Temporal Analysis with ML-32M (FUTURE)**
+- **Purpose**: Create realistic temporal split using dataset differences
+- **Strategy**: ML-32M (complete) vs ML-20M (past) = Future data
+- **Timeline**: 6-8 hours on A6000 GPU
+- **Success Criteria**: Model predicts future user behavior accurately
+- **Command**: `./runpod_entrypoint.sh --model ss4rec-official --dataset ml-32m --temporal-split`
+
+### **🔬 TEMPORAL ANALYSIS BENEFITS**
+- **Realistic Future Data**: ML-32M - ML-20M = Actual future user interactions
+- **Temporal Validation**: Test model's ability to predict future behavior
+- **Research Value**: Novel approach to temporal recommendation evaluation
+- **Production Relevance**: Simulates real-world scenario where new data arrives over time
 
 ### **ML-1M Test Configuration**
 - **Dataset**: Standard RecBole ml-1m (automatically downloaded)
@@ -20,12 +47,30 @@
 
 ### **Testing Commands**
 ```bash
-# Local testing
-python test_ss4rec_ml1m.py --config configs/official/ss4rec_ml1m_test.yaml --debug
-
-# RunPod testing
+# Phase 1: ML-1M Testing (CURRENT)
 ./runpod_entrypoint.sh --test-ml1m --debug
+
+# Phase 2: ML-20M Training (NEXT)
+./runpod_entrypoint.sh --model ss4rec-official --dataset ml-20m --debug
+
+# Phase 3: Temporal Analysis (FUTURE)
+./runpod_entrypoint.sh --model ss4rec-official --dataset ml-32m --temporal-split --debug
 ```
+
+### **📊 DATASET COMPARISON & TEMPORAL SPLIT**
+
+#### **Dataset Sizes & Characteristics**
+| Dataset | Users | Movies | Ratings | Time Range | Purpose |
+|---------|-------|--------|---------|------------|---------|
+| **ML-1M** | 6,040 | 3,952 | 1M | 2000-2003 | Quick validation |
+| **ML-20M** | 138,493 | 27,278 | 20M | 1995-2015 | Scale validation |
+| **ML-32M** | 200,948 | 87,585 | 32M | 1995-2023 | Complete dataset |
+
+#### **Temporal Split Strategy**
+- **Past Data (ML-20M)**: Train model on data up to 2015
+- **Future Data (ML-32M - ML-20M)**: Test model on 2015-2023 data
+- **Temporal Gap**: 8 years of real user behavior evolution
+- **Realistic Evaluation**: Tests model's ability to predict future trends
 
 ### **Dependency Fix Applied**
 - ✅ Added `kmeans-pytorch>=0.3.0` to requirements_ss4rec.txt
@@ -38,6 +83,12 @@ python test_ss4rec_ml1m.py --config configs/official/ss4rec_ml1m_test.yaml --deb
 - ✅ Updated test script to handle `torch.distributed.barrier()` calls
 - ✅ Added cleanup for distributed process groups
 - **Issue**: RecBole tries to use distributed training features even in single-GPU mode
+
+### **Model Loading Fix Applied**
+- ✅ Fixed SS4Rec model initialization with proper config object
+- ✅ Added minimal config creation for model testing
+- ✅ Added distributed environment setup for model loading test
+- **Issue**: SS4Rec model requires valid config object, not None
 
 ## 🎉 PREVIOUS ISSUES RESOLVED
 
