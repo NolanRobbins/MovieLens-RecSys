@@ -12,6 +12,7 @@ This implementation uses:
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.cuda.amp as amp
 from typing import Dict, Any, Optional, Tuple
 import numpy as np
 
@@ -370,7 +371,12 @@ class SS4RecLayer(nn.Module):
         x = self.norm1(x + ssm_out)  # Residual connection
         
         # 2. Relation-Aware processing with Mamba
-        mamba_out = self.mamba_layer(x)
+        # Some builds of causal-conv1d used by mamba-ssm are sensitive to dtype/autocast.
+        # Run Mamba in float32 without autocast and with contiguous memory to avoid kernel signature issues.
+        with amp.autocast(enabled=False):
+            mamba_in = x.to(dtype=torch.float32).contiguous()
+            mamba_out = self.mamba_layer(mamba_in)
+            mamba_out = mamba_out.to(dtype=x.dtype)
         mamba_out = self.dropout(mamba_out)
         x = self.norm2(x + mamba_out)  # Residual connection
         
