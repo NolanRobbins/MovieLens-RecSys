@@ -128,18 +128,28 @@ class SS4RecOfficial(SequentialRecommender):
                 "Install with: uv pip install mamba-ssm==2.2.2"
             )
         
+        # Helper to safely read from RecBole Config with defaults
+        def cfg_value(cfg_obj, key: str, default: Any) -> Any:
+            try:
+                return cfg_obj[key]
+            except Exception:
+                try:
+                    return getattr(cfg_obj, 'final_config_dict', {}).get(key, default)
+                except Exception:
+                    return default
+        
         # Model dimensions from config/paper
-        self.hidden_size = config.get('hidden_size', 64)
-        self.n_layers = config.get('n_layers', 2)
-        self.dropout_prob = config.get('dropout_prob', 0.5)
-        self.max_seq_length = config.get('MAX_ITEM_LIST_LENGTH', 50)
+        self.hidden_size = cfg_value(config, 'hidden_size', 64)
+        self.n_layers = cfg_value(config, 'n_layers', 2)
+        self.dropout_prob = cfg_value(config, 'dropout_prob', 0.5)
+        self.max_seq_length = cfg_value(config, 'MAX_ITEM_LIST_LENGTH', 50)
         
         # SSM-specific parameters
-        self.d_state = config.get('d_state', 16)
-        self.d_conv = config.get('d_conv', 4)
-        self.expand = config.get('expand', 2)
-        self.dt_min = config.get('dt_min', 0.001)
-        self.dt_max = config.get('dt_max', 0.1)
+        self.d_state = cfg_value(config, 'd_state', 16)
+        self.d_conv = cfg_value(config, 'd_conv', 4)
+        self.expand = cfg_value(config, 'expand', 2)
+        self.dt_min = cfg_value(config, 'dt_min', 0.001)
+        self.dt_max = cfg_value(config, 'dt_max', 0.1)
         
         # Get number of items from dataset or config
         if hasattr(dataset, 'num_items'):
@@ -147,7 +157,7 @@ class SS4RecOfficial(SequentialRecommender):
         elif hasattr(dataset, 'field2token_id') and 'item_id' in dataset.field2token_id:
             self.n_items = len(dataset.field2token_id['item_id'])
         else:
-            self.n_items = config.get('n_items', 10000)  # Default fallback
+            self.n_items = cfg_value(config, 'n_items', 10000)  # Default fallback
             
         # Item embedding layer
         self.item_embedding = nn.Embedding(
