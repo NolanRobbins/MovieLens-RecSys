@@ -319,13 +319,11 @@ def run_ss4rec_ml1m_test(config_file, debug=False):
         # Import the custom model
         from models.official_ss4rec.ss4rec_official import SS4RecOfficial
         
-        # Load configuration - use a standard model for config
-        base_config = Config(model='BPR', dataset='ml-1m', config_file_list=[config_file])
+        # Create configuration using a known sequential model so RecBole sets MODEL_TYPE properly
+        base_config = Config(model='SASRec', dataset='ml-1m', config_file_list=[config_file])
         
-        # Ensure RecBole config stores model name as string for logging/paths
+        # Use our official model name for logging; keep RecBole's internal MODEL_TYPE from SASRec
         base_config['model'] = 'SS4RecOfficial'
-        # RecBole expects uppercase MODEL_TYPE keys for type2class mapping
-        base_config['MODEL_TYPE'] = 'SEQUENTIAL'
         
         init_seed(base_config['seed'], base_config['reproducibility'])
         
