@@ -71,14 +71,10 @@ while [[ $# -gt 0 ]]; do
             MODEL_TYPE="ss4rec-ml20m-test"
             shift
             ;;
-        --temporal-analysis)
-            MODEL_TYPE="ss4rec-temporal-analysis"
-            shift
-            ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
-            echo "  --model MODEL     Model type (ncf, ss4rec, ss4rec-official, ss4rec-ml1m-test, ss4rec-ml20m-test, ss4rec-temporal-analysis) [default: ncf]"
+            echo "  --model MODEL     Model type (ncf, ss4rec, ss4rec-official, ss4rec-ml1m-test, ss4rec-ml20m-test) [default: ncf]"
             echo "  --config FILE     Custom config file"
             echo "  --no-wandb        Disable W&B logging"
             echo "  --no-setup        Skip automatic setup"
@@ -86,7 +82,6 @@ while [[ $# -gt 0 ]]; do
             echo "  --production      Disable debug logging for optimal performance"
             echo "  --test-ml1m       Test SS4Rec on ml-1m dataset before using ml-25m"
             echo "  --test-ml20m      Test SS4Rec on ml-20m dataset for scale validation"
-            echo "  --temporal-analysis Run temporal analysis with ML-32M vs ML-20M"
             echo "  --help            Show this help"
             exit 0
             ;;
@@ -378,8 +373,6 @@ if [ -z "$CONFIG_FILE" ]; then
         CONFIG_FILE="configs/official/ss4rec_ml1m_test.yaml"
     elif [ "$MODEL_TYPE" = "ss4rec-ml20m-test" ]; then
         CONFIG_FILE="configs/official/ss4rec_ml20m_test.yaml"
-    elif [ "$MODEL_TYPE" = "ss4rec-temporal-analysis" ]; then
-        CONFIG_FILE="data/temporal_split/temporal_split_config.yaml"
     else
         CONFIG_FILE="configs/${MODEL_TYPE}.yaml"
     fi
@@ -551,11 +544,6 @@ elif [ "$MODEL_TYPE" = "ss4rec-ml20m-test" ]; then
     else
         TRAIN_CMD="python training/official/runpod_train_ss4rec_official.py --config $CONFIG_FILE"
     fi
-elif [ "$MODEL_TYPE" = "ss4rec-temporal-analysis" ]; then
-    # SS4Rec Temporal Analysis
-    log "🔬 Running SS4Rec temporal analysis with ML-32M vs ML-20M"
-    log "📊 First running temporal analysis to create split..."
-    TRAIN_CMD="python temporal_analysis.py --ml20m-path data/ml-20m --ml32m-path data/ml-32m --output-dir data/temporal_split --debug && python training/official/runpod_train_ss4rec_official.py --config $CONFIG_FILE --debug"
 elif [ "$MODEL_TYPE" = "ss4rec" ]; then
     # Custom SS4Rec (deprecated - has gradient explosion issues)
     log "⚠️ WARNING: Using deprecated custom SS4Rec implementation"

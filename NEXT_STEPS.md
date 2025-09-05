@@ -25,18 +25,19 @@
 - **Success Criteria**: HR@10 > 0.30, NDCG@10 > 0.25
 - **Command**: `./runpod_entrypoint.sh --model ss4rec-official --dataset ml-20m`
 
-#### **Phase 3: Temporal Analysis with ML-32M (FUTURE)**
-- **Purpose**: Create realistic temporal split using dataset differences
-- **Strategy**: ML-32M (complete) vs ML-20M (past) = Future data
-- **Timeline**: 6-8 hours on A6000 GPU
-- **Success Criteria**: Model predicts future user behavior accurately
-- **Command**: `./runpod_entrypoint.sh --model ss4rec-official --dataset ml-32m --temporal-split`
+#### **Phase 3: ETL Pipeline for Model Drift Detection (FUTURE)**
+- **Purpose**: Create ETL pipeline to detect model and data drift over time
+- **Strategy**: ML-32M (complete) vs ML-20M (past) = Future data for drift analysis
+- **Timeline**: Local processing (no GPU required)
+- **Success Criteria**: Detect model performance degradation and data distribution shifts
+- **Implementation**: ETL pipeline + drift detection system
 
-### **🔬 TEMPORAL ANALYSIS BENEFITS**
+### **🔬 ETL PIPELINE & DRIFT DETECTION BENEFITS**
 - **Realistic Future Data**: ML-32M - ML-20M = Actual future user interactions
-- **Temporal Validation**: Test model's ability to predict future behavior
-- **Research Value**: Novel approach to temporal recommendation evaluation
-- **Production Relevance**: Simulates real-world scenario where new data arrives over time
+- **Model Drift Detection**: Monitor trained ML-20M model performance on future data
+- **Data Drift Detection**: Analyze distribution shifts in user behavior over time
+- **Production Relevance**: Simulates real-world scenario where models need drift monitoring
+- **Cost Effective**: Local processing, no GPU costs for drift analysis
 
 ### **ML-1M Test Configuration**
 - **Dataset**: Standard RecBole ml-1m (automatically downloaded)
@@ -51,10 +52,11 @@
 ./runpod_entrypoint.sh --test-ml1m --debug
 
 # Phase 2: ML-20M Training (NEXT)
-./runpod_entrypoint.sh --model ss4rec-official --dataset ml-20m --debug
+./runpod_entrypoint.sh --test-ml20m --debug
 
-# Phase 3: Temporal Analysis (FUTURE)
-./runpod_entrypoint.sh --model ss4rec-official --dataset ml-32m --temporal-split --debug
+# Phase 3: ETL Pipeline for Drift Detection (FUTURE - Local)
+python temporal_analysis.py --ml20m-path data/ml-20m --ml32m-path data/ml-32m --output-dir data/drift_analysis
+python etl/drift_detection_pipeline.py --trained-model results/ml20m_model.pt --future-data data/drift_analysis/ml32m_future.inter
 ```
 
 ### **📊 DATASET COMPARISON & TEMPORAL SPLIT**
@@ -77,6 +79,12 @@
 - ✅ Updated runpod_entrypoint.sh to install kmeans-pytorch before RecBole
 - ✅ Updated test script to check for kmeans_pytorch dependency
 - **Issue**: RecBole's LDiffRec model requires kmeans-pytorch but it's not included in RecBole's dependencies
+
+### **NumPy 2.0 Compatibility Fix Applied** 🆕
+- ✅ Requirements file already correctly constrains NumPy: `numpy>=1.21.0,<2.0.0`
+- ✅ Verified no `np.float_` usage in our training files
+- **Issue**: RecBole 1.2.0 uses deprecated `np.float_` which was removed in NumPy 2.0, causing `AttributeError`
+- **Solution**: Ensure NumPy <2.0.0 is installed (requirements file handles this)
 
 ### **Distributed Training Fix Applied**
 - ✅ Added proper single-GPU distributed environment initialization

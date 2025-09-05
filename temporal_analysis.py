@@ -226,10 +226,10 @@ def create_temporal_config(analysis_results, output_dir):
 
 def main():
     """Main function"""
-    parser = argparse.ArgumentParser(description='Temporal Analysis for ML-32M vs ML-20M')
+    parser = argparse.ArgumentParser(description='Temporal Analysis for ML-32M vs ML-20M - ETL Pipeline')
     parser.add_argument('--ml20m-path', required=True, help='Path to ML-20M dataset')
     parser.add_argument('--ml32m-path', required=True, help='Path to ML-32M dataset')
-    parser.add_argument('--output-dir', default='data/temporal_split', help='Output directory')
+    parser.add_argument('--output-dir', default='data/drift_analysis', help='Output directory for drift analysis')
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     
     args = parser.parse_args()
