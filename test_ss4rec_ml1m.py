@@ -324,7 +324,8 @@ def run_ss4rec_ml1m_test(config_file, debug=False):
         
         # Ensure RecBole config stores model name as string for logging/paths
         base_config['model'] = 'SS4RecOfficial'
-        base_config['MODEL_TYPE'] = 'Sequential'
+        # RecBole expects uppercase MODEL_TYPE keys for type2class mapping
+        base_config['MODEL_TYPE'] = 'SEQUENTIAL'
         
         init_seed(base_config['seed'], base_config['reproducibility'])
         
