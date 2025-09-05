@@ -2,7 +2,7 @@
 # NOTE: s5-pytorch requires Python 3.10+ and PyTorch 2.0+
 # Core ML framework dependencies (install torch first to resolve build dependencies)
 torch>=2.0.0
-numpy>=1.21.0,<2.0.0
+numpy<=1.23.5
 pandas>=1.3.0
 scipy>=1.9.0
 scikit-learn>=1.1.0
