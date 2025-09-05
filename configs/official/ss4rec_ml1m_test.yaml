@@ -56,8 +56,8 @@ val_interval:
 # Data splitting (RecBole Standard)
 eval_args:
   group_by: user
-  split: {'RS': [0.8, 0.1, 0.1]}   # Random split for testing
-  order: 'RO'                       # Random order for testing
+  split: {'RS': [0.8, 0.1, 0.1]}   # Random split ratios
+  order: 'TO'                       # Time order required for sequential recommendation
   mode: full
   
 # Device and Reproducibility  
