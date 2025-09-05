@@ -260,11 +260,11 @@ if [[ "$MODEL_TYPE" == "ss4rec"* ]] && [ -f "requirements_ss4rec.txt" ]; then
     
     # Install core dependencies first
     log "🔧 Installing core ML dependencies..."
-    uv pip install torch>=2.0.0 numpy>=1.21.0 pandas>=1.3.0 scikit-learn>=1.0.0 || error_exit "Failed to install core dependencies"
+    uv pip install torch>=2.0.0 numpy>=1.23.5 pandas>=1.3.0 scikit-learn>=1.0.0 || error_exit "Failed to install core dependencies"
     
     # Install state space dependencies individually
-    log "📦 Installing causal-conv1d..."
-    uv pip install "causal-conv1d>=1.2.0" || error_exit "Failed to install causal-conv1d"
+    log "📦 Installing causal-conv1d (pinned to 1.2.0 to avoid kernel issues)..."
+    uv pip install "causal-conv1d==1.2.0" --no-binary=causal-conv1d || error_exit "Failed to install causal-conv1d"
     
     log "📦 Installing mamba-ssm (with torch available)..."
     # Install additional build dependencies for mamba-ssm
@@ -309,6 +309,21 @@ log "✅ Verifying Python environment..."
 which python
 python -c "import torch; print(f'PyTorch version: {torch.__version__}')"
 python -c "import pandas; print(f'Pandas version: {pandas.__version__}')"
+python - << 'PY'
+import torch
+print('CUDA:', torch.version.cuda)
+print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)
+try:
+    import mamba_ssm
+    print('mamba-ssm:', getattr(mamba_ssm, '__version__', 'unknown'))
+except Exception as e:
+    print('mamba-ssm import error:', e)
+try:
+    import causal_conv1d
+    print('causal-conv1d:', getattr(causal_conv1d, '__version__', 'unknown'))
+except Exception as e:
+    print('causal-conv1d import error:', e)
+PY
 
 # Additional verification for SS4Rec
 if [[ "$MODEL_TYPE" == "ss4rec"* ]]; then

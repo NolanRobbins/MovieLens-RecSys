@@ -59,6 +59,19 @@ python temporal_analysis.py --ml20m-path data/ml-20m --ml32m-path data/ml-32m --
 python etl/drift_detection_pipeline.py --trained-model results/ml20m_model.pt --future-data data/drift_analysis/ml32m_future.inter
 ```
 
+### **Kernel Compatibility Fix (Mamba + causal-conv1d)** 🆕
+- ✅ Pin `causal-conv1d==1.2.0` in `requirements_ss4rec.txt`
+- ✅ Force source build on RunPod: `--no-binary=causal-conv1d`
+- ✅ Print versions in entrypoint to verify Torch/CUDA/Mamba/causal-conv1d
+- 🔁 If Mamba kernel still fails, temporary identity fallback is enabled to validate pipeline
+- 📌 If needed, reinstall on RunPod:
+```bash
+pip uninstall -y mamba-ssm causal-conv1d
+pip install --index-url https://download.pytorch.org/whl/cu121 torch==2.1.2
+pip install causal-conv1d==1.2.0 --no-binary=causal-conv1d
+pip install mamba-ssm==2.2.2
+```
+
 ### **📊 DATASET COMPARISON & TEMPORAL SPLIT**
 
 #### **Dataset Sizes & Characteristics**

@@ -14,7 +14,8 @@ wheel>=0.37.0
 setuptools>=60.0
 
 # State Space Model dependencies (mamba-ssm requires torch to be available during build)
-causal-conv1d>=1.2.0
+# Pin to avoid kernel signature mismatches on some CUDA images
+causal-conv1d==1.2.0
 mamba-ssm==2.2.2
 # s5-pytorch>=0.2.1
 
