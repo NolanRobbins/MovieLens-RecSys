@@ -330,6 +330,7 @@ class SS4RecLayer(nn.Module):
         super().__init__()
         
         self.d_model = d_model
+        self._mamba_failed = False
         
         # Time-Aware SSM using custom recurrent implementation
         self.time_aware_ssm = TimeAwareSSM(
@@ -375,7 +376,13 @@ class SS4RecLayer(nn.Module):
         # Run Mamba in float32 without autocast and with contiguous memory to avoid kernel signature issues.
         with amp.autocast(enabled=False):
             mamba_in = x.to(dtype=torch.float32).contiguous()
-            mamba_out = self.mamba_layer(mamba_in)
+            try:
+                mamba_out = self.mamba_layer(mamba_in)
+            except Exception as e:
+                if not self._mamba_failed:
+                    print(f"Warning: Mamba kernel failed ({e}). Falling back to identity this run.")
+                    self._mamba_failed = True
+                mamba_out = mamba_in  # Identity fallback
             mamba_out = mamba_out.to(dtype=x.dtype)
         mamba_out = self.dropout(mamba_out)
         x = self.norm2(x + mamba_out)  # Residual connection
