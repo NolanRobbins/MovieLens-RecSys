@@ -1,0 +1,94 @@
+# SS4Rec Debug Configuration - ML-1M Dataset
+# Optimized for fast iteration and debugging on Google Cloud
+# Using ML-1M (1M ratings) instead of ML-25M for rapid testing
+
+# Model Configuration
+model: SS4Rec
+dataset: ml-1m
+
+# SS4Rec Architecture Parameters (DEBUG - Reduced Size)
+hidden_size: 32             # Reduced from 64 for faster training
+num_layers: 1               # Reduced from 2 for faster training
+dropout_prob: 0.3           # Reduced dropout
+loss_type: 'BPR'           # Bayesian Personalized Ranking
+
+# State Space Model Parameters (DEBUG)
+d_state: 8                  # Reduced from 16
+d_conv: 4                   # Standard value
+expand: 2                   # Standard value
+dt_min: 0.001              # Minimum discretization step
+dt_max: 0.1                # Maximum discretization step
+d_P: 8                     # S5 state dimension (reduced)
+d_H: 32                    # S5 width dimension (reduced)
+model_type: 'hybrid'       # SS4Rec model type
+
+# Timestamp Field Configuration
+TIMESTAMP_FIELD: timestamp
+
+# Training Parameters (DEBUG - Fast Training)
+learning_rate: 0.003        # Slightly higher for faster convergence
+train_batch_size: 512       # Small batch for ML-1M
+eval_batch_size: 512        # Small batch size
+epochs: 15                  # Quick debug run
+stopping_step: 3            # Early stopping
+weight_decay: 0.0001        # L2 regularization
+
+# Evaluation Configuration (DEBUG)
+metrics: ['Recall', 'MRR', 'NDCG', 'Hit']    # Standard RecSys metrics
+topk: [5, 10]                                 # Reduced evaluation complexity
+valid_metric: 'NDCG@10'                       # Primary validation metric
+
+# Data Configuration (RecBole Standard - ML-1M)
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: item_id
+RATING_FIELD: rating
+TIME_FIELD: timestamp
+data_path: 'data/recbole_format'
+download: True              # Let RecBole download ML-1M automatically
+MAX_ITEM_LIST_LENGTH: 20    # Reduced for ML-1M (shorter sequences)
+ITEM_LIST_LENGTH_FIELD: item_length
+LIST_SUFFIX: _list
+load_col:
+  inter: ['user_id', 'item_id', 'rating', 'timestamp']
+
+# Data splitting (RecBole Standard)
+eval_args:
+  group_by: user
+  split: {'LS': 'valid_and_test'}
+  order: 'TO'
+  mode: full
+
+# Device Configuration
+device: cuda
+gpu_id: 0
+reproducibility: true
+seed: 2023
+
+# Single-GPU parameters
+nproc: 1
+world_size: 1
+offset: 0
+ip: localhost
+port: 29500
+backend: gloo
+
+# Optimization (DEBUG)
+scheduler: 'StepLR'
+step_size: 5                # Frequent LR updates
+gamma: 0.8                  # More aggressive decay
+
+# Logging and Checkpointing (DEBUG)
+log_wandb: false
+save_dataset: false
+save_dataloaders: false
+checkpoint_dir: 'results/debug_ss4rec_ml1m'
+
+# Performance (DEBUG)
+num_workers: 2              # Reduced workers
+pin_memory: true
+
+# Expected Performance Targets (ML-1M DEBUG):
+# - HR@10: > 0.25 (ML-1M typically easier than ML-25M)
+# - NDCG@10: > 0.20 (good performance for debug)
+# - Training Time: 10-20 minutes on T4 GPU
+# - Dataset Size: ~1M interactions, ~6K users, ~4K items

@@ -15,9 +15,9 @@ setuptools>=60.0
 
 # State Space Model dependencies (mamba-ssm requires torch to be available during build)
 # Pin to avoid kernel signature mismatches on some CUDA images
-causal-conv1d==1.2.0
-mamba-ssm==2.2.2
-# s5-pytorch>=0.2.1
+causal-conv1d>=1.1.0        # More flexible version constraint
+mamba-ssm>=2.0.0            # Compatible version
+s5-pytorch>=0.2.1           # REQUIRED for official SS4Rec (Time-Aware SSM)
 
 # RecBole framework (REQUIRED for official SS4Rec implementation)
 recbole==1.2.0

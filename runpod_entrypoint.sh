@@ -29,6 +29,12 @@ export PYTHONPATH="/workspace:$PYTHONPATH"
 export CUDA_VISIBLE_DEVICES=0
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
 
+# 🔍 PRE-TRAINING VALIDATION (NEW)
+if [ "$DEBUG_LOGGING" = true ]; then
+    log "🔍 Running comprehensive pre-training validation..."
+    python pre_training_check.py --fix-issues || error_exit "Pre-training validation failed"
+fi
+
 # Parse command line arguments
 MODEL_TYPE="ncf"
 CONFIG_FILE=""
@@ -542,7 +548,7 @@ log "================================"
 # Build training command
 if [ "$MODEL_TYPE" = "ss4rec-official" ]; then
     # Official SS4Rec using RecBole framework
-    TRAIN_CMD="python training/official/runpod_train_ss4rec_official.py --config $CONFIG_FILE --install-deps --prepare-data"
+    TRAIN_CMD="python training/official/train_ss4rec_official.py --config $CONFIG_FILE"
 elif [ "$MODEL_TYPE" = "ss4rec-ml1m-test" ]; then
     # SS4Rec ML-1M test
     log "🧪 Running SS4Rec ML-1M test before using ml-25m dataset"
@@ -555,9 +561,9 @@ elif [ "$MODEL_TYPE" = "ss4rec-ml20m-test" ]; then
     # SS4Rec ML-20M test
     log "🧪 Running SS4Rec ML-20M test for scale validation"
     if [ "$DEBUG_LOGGING" = true ]; then
-        TRAIN_CMD="python training/official/runpod_train_ss4rec_official.py --config $CONFIG_FILE --debug"
+        TRAIN_CMD="python training/official/train_ss4rec_official.py --config $CONFIG_FILE --log-level DEBUG"
     else
-        TRAIN_CMD="python training/official/runpod_train_ss4rec_official.py --config $CONFIG_FILE"
+        TRAIN_CMD="python training/official/train_ss4rec_official.py --config $CONFIG_FILE"
     fi
 elif [ "$MODEL_TYPE" = "ss4rec" ]; then
     # Custom SS4Rec (deprecated - has gradient explosion issues)
@@ -565,16 +571,16 @@ elif [ "$MODEL_TYPE" = "ss4rec" ]; then
     log "⚠️ This implementation has gradient explosion issues after epoch 3"
     log "💡 Consider using --model ss4rec-official instead"
     if [ "$DEBUG_LOGGING" = true ]; then
-        TRAIN_CMD="python -c 'from debug_logging_config import setup_comprehensive_debug_logging; setup_comprehensive_debug_logging()' && python training/train_ss4rec.py --config $CONFIG_FILE"
+        TRAIN_CMD="python training/official/train_ss4rec_official.py --config $CONFIG_FILE --log-level DEBUG"
     else
-        TRAIN_CMD="python training/train_ss4rec.py --config $CONFIG_FILE"
+        TRAIN_CMD="python training/official/train_ss4rec_official.py --config $CONFIG_FILE"
     fi
 else
     # NCF and other models
     if [ "$DEBUG_LOGGING" = true ]; then
-        TRAIN_CMD="python -c 'from debug_logging_config import setup_comprehensive_debug_logging; setup_comprehensive_debug_logging()' && python auto_train_ss4rec.py --model $MODEL_TYPE --config $CONFIG_FILE"
+        TRAIN_CMD="python training/train_ncf.py --config $CONFIG_FILE --log-level DEBUG"
     else
-        TRAIN_CMD="python auto_train_ss4rec.py --model $MODEL_TYPE --config $CONFIG_FILE"
+        TRAIN_CMD="python training/train_ncf.py --config $CONFIG_FILE"
     fi
 fi
 

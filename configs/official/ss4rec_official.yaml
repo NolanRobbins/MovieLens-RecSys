@@ -9,18 +9,24 @@
 model: SS4RecOfficial
 dataset: ml-25m
 
-# SS4Rec Architecture Parameters (from paper)
+# SS4Rec Architecture Parameters (from official implementation)
 hidden_size: 64             # Model dimension
-n_layers: 2                 # Number of SS4Rec layers
+num_layers: 2               # Number of SS4Rec layers (changed from n_layers)
 dropout_prob: 0.5           # Dropout probability
 loss_type: 'BPR'           # Bayesian Personalized Ranking for sequential recommendation
 
-# State Space Model Parameters
+# State Space Model Parameters (official SS4Rec)
 d_state: 16                 # State dimension for SSMs
 d_conv: 4                   # Convolution dimension
 expand: 2                   # Expansion factor
 dt_min: 0.001              # Minimum discretization step
 dt_max: 0.1                # Maximum discretization step
+d_P: 16                     # S5 state dimension (Time-Aware SSM)
+d_H: 64                     # S5 width dimension (Time-Aware SSM)
+model_type: 'hybrid'        # SS4Rec model type
+
+# Timestamp Field Configuration (official implementation)
+TIMESTAMP_FIELD: timestamp  # Base timestamp field name
 
 # Training Parameters (from paper)
 learning_rate: 0.001        # AdamW learning rate

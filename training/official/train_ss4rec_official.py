@@ -59,10 +59,10 @@ def check_recbole_imports():
         from recbole.trainer import Trainer
         from recbole.utils import init_seed, init_logger
         
-        # Import our custom model
-        from models.official_ss4rec.ss4rec_official import SS4RecOfficial as SS4RecOfficialClass, create_ss4rec_config as create_config
+        # Import our custom model (official SS4Rec implementation)
+        from models.official_ss4rec.ss4rec_official import SS4Rec as SS4RecOfficialClass
         SS4RecOfficial = SS4RecOfficialClass
-        create_ss4rec_config = create_config
+        # Use simple config creation instead of create_ss4rec_config function
         RECBOLE_AVAILABLE = True
         return True
     except ImportError as e:
@@ -89,12 +89,49 @@ def setup_logging(log_level: str = 'INFO', log_file: str = None):
 def train_ss4rec_official(config_file: str, dataset_path: str = None, output_dir: str = None):
     """
     Train SS4Rec using official RecBole framework
-    
+
     Args:
         config_file: Path to YAML configuration file
         dataset_path: Path to dataset directory (optional)
         output_dir: Path to output directory for results
     """
+    # 🔍 PRE-TRAINING VALIDATION SUITE
+    logging.info("🔍 Running pre-training validation suite...")
+
+    # 1. Validate dependencies
+    logging.info("📦 Validating dependencies...")
+    try:
+        import subprocess
+        result = subprocess.run([
+            'python', 'validate_dependencies.py'
+        ], capture_output=True, text=True, cwd=project_root)
+
+        if result.returncode != 0:
+            logging.error("❌ Dependency validation failed:")
+            logging.error(result.stderr)
+            raise RuntimeError("Dependency validation failed")
+        else:
+            logging.info("✅ All dependencies validated")
+    except Exception as e:
+        logging.warning(f"⚠️ Could not run dependency validation: {e}")
+
+    # 2. Validate data pipeline
+    logging.info("📊 Validating data pipeline...")
+    try:
+        result = subprocess.run([
+            'python', 'validate_data_pipeline.py',
+            '--config', config_file
+        ], capture_output=True, text=True, cwd=project_root)
+
+        if result.returncode != 0:
+            logging.error("❌ Data pipeline validation failed:")
+            logging.error(result.stderr)
+            raise RuntimeError("Data pipeline validation failed")
+        else:
+            logging.info("✅ Data pipeline validated")
+    except Exception as e:
+        logging.warning(f"⚠️ Could not run data pipeline validation: {e}")
+
     # Check if RecBole imports are available now
     if not check_recbole_imports():
         raise ImportError("RecBole is required. Install with: uv pip install recbole==1.2.0")
@@ -113,8 +150,8 @@ def train_ss4rec_official(config_file: str, dataset_path: str = None, output_dir
         config = Config(model=SS4RecOfficial, config_file_list=[config_file])
     else:
         logging.warning(f"⚠️ Config file not found: {config_file}")
-        logging.info("📄 Using default configuration")
-        config = Config(model=SS4RecOfficial, config_dict=create_ss4rec_config())
+        logging.error("❌ Config file is required for official SS4Rec implementation")
+        raise FileNotFoundError(f"Config file not found: {config_file}")
     
     # Override paths if provided
     if dataset_path:
@@ -139,6 +176,21 @@ def train_ss4rec_official(config_file: str, dataset_path: str = None, output_dir
     logging.info(f"  - Device: {config['device']}")
     
     try:
+        # 🛡️ Setup training stability monitoring
+        logging.info("🛡️ Setting up training stability monitoring...")
+
+        # Import training monitor
+        import sys
+        sys.path.append(str(project_root))
+        from training_stability_monitor import TrainingMonitor
+
+        monitor = TrainingMonitor(log_dir=f"{output_dir}/stability_logs" if output_dir else "logs/stability")
+
+        # Validate CUDA setup
+        cuda_info = monitor.validate_cuda_setup()
+        if not cuda_info.get('operations_test', False):
+            logging.warning("⚠️ CUDA operations test failed - training may encounter issues")
+
         # Run training using RecBole's standard pipeline
         logging.info("🏃 Starting RecBole training pipeline...")
         result = run_recbole(
